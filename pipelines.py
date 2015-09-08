@@ -1,5 +1,3 @@
-import sys
-
 from pyIMS.image_measures.isotope_pattern_match import isotope_pattern_match
 from pyIMS.image_measures.isotope_image_correlation import isotope_image_correlation
 from pyIMS.image_measures.level_sets_measure import measure_of_chaos
