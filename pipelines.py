@@ -118,7 +118,7 @@ class Pipeline(object):
                 mz_list_tmp = cPickle.load(open(load_file,'r'))
             else:
                 print "calculating isotope patterns for adduct", adduct
-                mz_list_tmp = calculate_isotope_patterns(sum_formulae,adducts=(adduct,),isocalc_sig=isocalc_sig,isocalc_resolution=isocalc_resolution,charge=charge)
+                mz_list_tmp = calculate_isotope_patterns(self.sum_formulae,adducts=(adduct,),isocalc_sig=isocalc_sig,isocalc_resolution=isocalc_resolution,charge=charge)
                 if db_dump_folder != "":
                     cPickle.dump(mz_list_tmp,open(load_file,'w'))
             # add patterns to total list
