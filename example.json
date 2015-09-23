@@ -20,9 +20,7 @@
     "image_generation": {
         "ppm": 1.0,
         "nlevels": 30,
-        "q": 99,
-        "rows": 65,
-        "columns": 65
+        "q": 99
     },
     
     "results_thresholds": {

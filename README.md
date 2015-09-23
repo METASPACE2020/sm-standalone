@@ -7,7 +7,11 @@ Having said that, here's how to install and run the pipelines:
 * (Optional, for faster `measure_of_chaos`) install [OpenCV 3.0](http://opencv.org/downloads.html)
 * Copy the `example.json` template and edit it as necessary:
   * `method` can be either `reference` or `new`
-  * `file_inputs`→`data_file` must point to a file in `*.hdf5` format for the `reference` pipeline, and to `*.txt` for the `new`
-  * `nrows` and `ncols` under `image_generation` are necessary only for the `new` pipeline
+  * `file_inputs`→`data_file` must point to the input file 
+    * 'reference' pipeline accepts only the `*.hdf5` format
+    * 'new' pipeline accepts both `*.imzML` and `*.hdf5`
 * Run the pipeline: `python2 pipelines.py your_config.json`
-* The results are two files, one with scores for all formulae, and another with scores only for those passing the thresholds. Both files will be in `file_inputs`→`results_folder`.
+* The following results are stored in `file_inputs`→`results_folder`:
+  * a file with scores for all formulae;
+  * a file with scores only for the formulae that pass the thresholds
+  * images for each (formula, adduct) pair that passes the filter

@@ -7,6 +7,14 @@ import os
 import sys
 import cPickle
 import numpy as np
+import matplotlib.image
+import logging
+
+import scipy.signal as signal
+
+logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', datefmt='%H:%M:%S')
+
+profile = lambda x: x
 
 class Pipeline(object):
     def __init__(self, config):
@@ -20,17 +28,41 @@ class Pipeline(object):
         self.iso_correlation_score = {}
         self.iso_ratio_score = {}
 
+        self.chunk_size = 1000
+
         self.measure_tol = config['results_thresholds']['measure_tol']
         self.iso_corr_tol = config['results_thresholds']['iso_corr_tol']
         self.iso_ratio_tol = config['results_thresholds']['iso_ratio_tol']
 
     def run(self):
-        print "==== computing/loading isotope patterns"
+        logging.info("==== computing/loading isotope patterns")
         self.load_queries()
-        print "==== computing scores for all formulae"
+        logging.info("==== loading data")
+        self.load_data()
+        logging.info("==== computing scores for all formulae")
         self.compute_scores()
-        print "==== outputting results"
+        logging.info("==== outputting results")
         self.print_results()
+
+    def make2DImage(self, img):
+        result = np.empty(img.shape)
+        result[self.pixel_indices] = img
+        return result.reshape((self.nrows, self.ncols))
+
+    @profile
+    def print_images(self, imgs, sum_formula, adduct):
+        total_img = np.zeros((self.nrows, self.ncols))
+
+        img_output_dir = self.output_directory()
+        for i, mz in enumerate(self.mz_list[sum_formula][adduct][0]):
+            filename_out = "{img_output_dir}/{sum_formula}_{adduct}_{mz}.png".format(**locals())
+            with open(filename_out,'w') as f_out:
+                img = self.make2DImage(imgs[i])
+                total_img += img
+                matplotlib.image.imsave(filename_out, img)
+        
+        filename_out = "{img_output_dir}/_{sum_formula}_{adduct}.png".format(**locals())
+        matplotlib.image.imsave(filename_out, total_img)
 
     # template method
     def compute_scores(self):
@@ -39,15 +71,27 @@ class Pipeline(object):
         # Parse dataset
         raise NotImplementedError
 
+    def load_data(self):
+        raise NotImplementedError
+
     def algorithm_name(self):
         raise NotImplementedError
 
+    # creates the output directory if it doesn't exist
+    def output_directory(self):
+        output_dir = self.config['file_inputs']['results_folder']
+        if os.path.isdir(output_dir) == False:
+            os.mkdir(output_dir)
+        return output_dir
+
     # while all_images can have whatever shape, first_image is used for chaos measure
+    @profile
     def process_query(self, sum_formula, adduct, all_images, first_image, intensities):
         self.score_chaos(sum_formula, adduct, first_image)
         self.score_corr(sum_formula, adduct, all_images, intensities[1:])
         self.score_ratio(sum_formula, adduct, all_images, intensities)
 
+    @profile
     def hot_spot_removal(self, xics):
         for xic in xics:
             xic_q = np.percentile(xic, self.q)
@@ -109,16 +153,21 @@ class Pipeline(object):
         # Check if already generated and load if possible, otherwise calculate fresh   
         db_name =  os.path.splitext(os.path.basename(db_filename))[0] 
         mz_list={}
+        nmz = 0
+        nf = 0
         for adduct in self.adducts:
             load_file = '{}/{}_{}_{}_{}.dbasedump'.format(db_dump_folder,db_name,adduct,isocalc_sig,isocalc_resolution)
             if os.path.isfile(load_file):
-                print "loading cached isotope patterns for adduct", adduct
+                logging.info("loading cached isotope patterns for adduct %s" % adduct)
                 mz_list_tmp = cPickle.load(open(load_file,'r'))
             else:
-                print "calculating isotope patterns for adduct", adduct
+                logging.info("calculating isotope patterns for adduct %s" % adduct)
                 mz_list_tmp = calculate_isotope_patterns(self.sum_formulae,adducts=(adduct,),isocalc_sig=isocalc_sig,isocalc_resolution=isocalc_resolution,charge=charge)
                 if db_dump_folder != "":
-                    cPickle.dump(mz_list_tmp,open(load_file,'w'))
+                    if os.path.isdir(db_dump_folder)==False:
+                        os.mkdir(db_dump_folder)
+                    with open(load_file, 'w') as f:
+                        cPickle.dump(mz_list_tmp, f)
             # add patterns to total list
             for sum_formula in mz_list_tmp:
                 if not sum_formula in mz_list:
@@ -126,8 +175,10 @@ class Pipeline(object):
                 mzs, ints = mz_list_tmp[sum_formula][adduct]
                 order = ints.argsort()[::-1]
                 mz_list[sum_formula][adduct] = (mzs[order], ints[order])
+                nmz += len(ints)
+                nf += 1 
         self.mz_list = mz_list
-        print 'all isotope patterns generated and loaded'
+        logging.info("all isotope patterns generated and loaded (#formula+adduct pairs: {nf}, #peaks: {nmz})".format(**locals()))
 
     def passes_filters(self, sum_formula, adduct):
         def ok(dictionary, threshold):
@@ -169,6 +220,14 @@ class Pipeline(object):
                         self.iso_correlation_score[sum_formula][adduct],
                         self.iso_ratio_score[sum_formula][adduct]))
 
+    def report_scoring_progress(self, n_processed):
+        #logging.info(str(round(float(n_processed) * 100.0 / len(self.sum_formulae), 2)) + "% sum formulae processed")
+        logging.info(str(n_processed) + "/" + str(len(self.sum_formulae)) + " sum formulae processed")
+
+    def _calculate_dimensions(self):
+        dim = np.amax(self.coords, axis=0)
+        self.nrows = int(dim[0] + 1)
+        self.ncols = int(dim[1] + 1)
 
 class ReferencePipeline(Pipeline):
     def __init__(self, config):
@@ -177,77 +236,128 @@ class ReferencePipeline(Pipeline):
     def algorithm_name(self):
         return "reference"
 
-    def compute_scores(self):
+    def load_data(self):
         from pyIMS.hdf5.inMemoryIMS_hdf5 import inMemoryIMS_hdf5
-        IMS_dataset=inMemoryIMS_hdf5(self.data_file)
-            
+        self.IMS_dataset = inMemoryIMS_hdf5(self.data_file)
+        self.coords = self.IMS_dataset.coords - 1
+        self._calculate_dimensions()
+        self.pixel_indices = self.IMS_dataset.cube_pixel_indices
+
+    def compute_scores(self):
         for i, sum_formula in enumerate(self.sum_formulae):
-            if i % 1000 == 0 and i > 0:
-                print str(round(float(i) * 100.0 / len(self.sum_formulae), 2))+"%"
+            if i % self.chunk_size == 0 and i > 0:
+                self.report_scoring_progress(i)
             for adduct in self.adducts:
-                # 1. Generate ion images
-                ion_datacube = IMS_dataset.get_ion_image(self.mz_list[sum_formula][adduct][0], self.ppm) #for each spectrum, sum the intensity of all peaks within tol of mz_list
+                ion_datacube = self.IMS_dataset.get_ion_image(self.mz_list[sum_formula][adduct][0], self.ppm) #for each spectrum, sum the intensity of all peaks within tol of mz_list
                 ion_datacube.xic = self.hot_spot_removal(ion_datacube.xic)
 
-                # 2. Spatial Chaos 
                 img = ion_datacube.xic_to_image(0)
                 intensities = self.mz_list[sum_formula][adduct][1]
 
-                self.score_chaos(sum_formula, adduct, img)
-                # only compare pixels with values in the monoisotopic (otherwise high correlation for large empty areas)
-                notnull_monoiso = ion_datacube.xic[0] > 0 
-                #for xic in ion_datacube.xic:
-                #    xic = xic[notnull_monoiso]
+                self.process_query(sum_formula, adduct, ion_datacube.xic, img, intensities)
 
-                # 3. Score correlation with monoiso
-                self.score_corr(sum_formula, adduct, ion_datacube.xic, intensities[1:])
-                # 4. Score isotope ratio
-                self.score_ratio(sum_formula, adduct, ion_datacube.xic, intensities)
+                if self.passes_filters(sum_formula, adduct):
+                    assert np.allclose(ion_datacube.xic_to_image(0), self.make2DImage(ion_datacube.xic[0]))
+                    self.print_images(ion_datacube.xic, sum_formula, adduct)
+
+        self.report_scoring_progress(len(self.sum_formulae))
+
+#####################################################################################################################
+
+# a few helper functions used by the NewPipeline
+
+from pyMS import centroid_detection
+def prepare(mzs, ints, centroids=True):
+    if centroids == True:
+        mzs_list, intensity_list = mzs, ints
+    else:    
+        ints=signal.savgol_filter(ints, 5, 2)
+        mzs_list, intensity_list, indices_list = \
+            centroid_detection.gradient(np.asarray(mzs), np.asarray(ints), max_output=-1, weighted_bins=3)
+    mzs_list = np.asarray(mzs_list).astype(np.float64)
+    intensity_list = np.asarray(intensity_list).astype(np.float32)
+    intensity_list[intensity_list < 0] = 0
+    return mzs_list, intensity_list
+
+from collections import namedtuple
+Spectrum = namedtuple('Spectrum', ['index', 'mzs', 'cumsum_int', 'coords'])
+
+class Spectrum(object):
+    def __init__(self, i, mzs, intensities, coords):
+        self.index = int(i)
+        self.mzs = mzs
+        self.cumsum_int = np.cumsum(np.concatenate(([0], intensities)))
+        self.coords = np.asarray(coords)
+
+from pyimzml import ImzMLParser
+def readImzML(filename, centroids=True):
+    f_in = ImzMLParser.ImzMLParser(filename)       
+    for i, coords in enumerate(f_in.coordinates):
+        mzs, ints = prepare(*f_in.getspectrum(i), centroids=centroids)
+        if len(coords) == 2:
+            coords = (coords[0], coords[1], 0)
+        yield Spectrum(i, mzs, ints, map(lambda x: x-1, coords))
+
+import h5py
+def readHDF5(filename, centroids=True):
+    hdf = h5py.File(filename, 'r')
+    for i in hdf['/spectral_data'].keys():
+        tmp_str = "/spectral_data/" + i
+        mzs = hdf[tmp_str + '/centroid_mzs/']
+        ints = hdf[tmp_str + '/centroid_intensities/']
+        coords = hdf[tmp_str + '/coordinates/']
+        mzs, ints = prepare(mzs, ints, centroids=centroids)
+        yield Spectrum(i, mzs, ints, map(lambda x: x-1, coords))
 
 class NewPipeline(Pipeline):
     def __init__(self, config):
         super(NewPipeline, self).__init__(config)
-        self.nrows = config['image_generation']['rows']
-        self.ncols = config['image_generation']['columns']
 
     def algorithm_name(self):
         return "new"
 
-    def compute_scores(self):
-        def txt_to_spectrum(s):
-            arr = s.strip().split("|")
-            intensities = np.fromstring("0 " + arr[2], sep=' ')
-            return (int(arr[0]), np.fromstring(arr[1], sep=' '), np.cumsum(intensities))
-        print "reading spectra"
-        spectra_str = open(self.data_file).readlines()
-        spectra = map(txt_to_spectrum, spectra_str)
-        
-        chunk_size = 500
-        n_chunks = len(self.sum_formulae) / chunk_size + 1
+    def load_data(self):
+        if self.data_file.endswith(".imzML"):
+            spectra = readImzML(self.data_file)
+        elif self.data_file.endswith(".hdf5"):
+            spectra = readHDF5(self.data_file)
+        else:
+            raise "the input format is unsupported"
 
+        self.spectra = list(spectra)
+
+        self.coords = np.zeros((len(self.spectra), 3))
+        for sp in self.spectra:
+            self.coords[sp.index, :] = sp.coords
+        self._calculate_dimensions()
+        self.pixel_indices = np.array([sp.coords[0] * self.ncols + sp.coords[1] for sp in self.spectra])
+
+    @profile
+    def compute_scores(self):
+        chunk_size = self.chunk_size
+        n_chunks = len(self.sum_formulae) / chunk_size + 1
         for offset in xrange(0, len(self.sum_formulae), chunk_size):
-            print("processing chunk #%d/%d" % (offset / chunk_size + 1, n_chunks))
-            print "\tgetting ion images"
-            formulae = self.sum_formulae[offset:offset + chunk_size]
-            r = self.get_ion_images(spectra, formulae)
-            print "\tcomputing scores"
+            formulae = self.sum_formulae[offset : offset+chunk_size]
+            r = self.get_ion_images(self.spectra, formulae)
 
             for xic, (sum_formula, adduct) in zip(r, product(formulae, self.adducts)):
                 imgs = self.hot_spot_removal(xic)
-                img = imgs[0].reshape((self.nrows, self.ncols)).copy()
+                img = self.make2DImage(imgs[0])
                 intensities = self.mz_list[sum_formula][adduct][1]
                 self.process_query(sum_formula, adduct, imgs, img, intensities)
 
+                if self.passes_filters(sum_formula, adduct):
+                    self.print_images(imgs, sum_formula, adduct)
             del r
             import gc
             gc.collect()
+            self.report_scoring_progress(offset + len(formulae))
 
     def process_spectra_multiple_queries(self, mol_mz_intervals, spectra):
         from numba import njit
         @njit
         def numba_multiple_queries(lower, upper, lperm, uperm, mzs, cumsum_int,
                                    result, pixel, tmp1, tmp2):
-            ''' Equivalent to numpy_multiple_queries when lower and upper are sorted '''
             m = len(mzs)
             n = len(lower)
 
@@ -282,11 +392,10 @@ class NewPipeline(Pipeline):
         tmp1 = np.zeros(n, dtype=np.int)
         tmp2 = np.zeros(n, dtype=np.int)
 
-        for sp in spectra:
-            pixel, mzs, cumsum_int = sp
+        for i, sp in enumerate(spectra):
             numba_multiple_queries(
-                    lower, upper, lperm, uperm, mzs, cumsum_int,
-                    result, pixel, tmp1, tmp2)
+                    lower, upper, lperm, uperm, sp.mzs, sp.cumsum_int,
+                    result, i, tmp1, tmp2)
 
         return result
 
