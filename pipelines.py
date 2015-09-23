@@ -14,8 +14,6 @@ import scipy.signal as signal
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', datefmt='%H:%M:%S')
 
-profile = lambda x: x
-
 class Pipeline(object):
     def __init__(self, config):
         self.config = config
@@ -49,7 +47,6 @@ class Pipeline(object):
         result[self.pixel_indices] = img
         return result.reshape((self.nrows, self.ncols))
 
-    @profile
     def print_images(self, imgs, sum_formula, adduct):
         total_img = np.zeros((self.nrows, self.ncols))
 
@@ -85,13 +82,11 @@ class Pipeline(object):
         return output_dir
 
     # while all_images can have whatever shape, first_image is used for chaos measure
-    @profile
     def process_query(self, sum_formula, adduct, all_images, first_image, intensities):
         self.score_chaos(sum_formula, adduct, first_image)
         self.score_corr(sum_formula, adduct, all_images, intensities[1:])
         self.score_ratio(sum_formula, adduct, all_images, intensities)
 
-    @profile
     def hot_spot_removal(self, xics):
         for xic in xics:
             xic_q = np.percentile(xic, self.q)
@@ -332,7 +327,6 @@ class NewPipeline(Pipeline):
         self._calculate_dimensions()
         self.pixel_indices = np.array([sp.coords[0] * self.ncols + sp.coords[1] for sp in self.spectra])
 
-    @profile
     def compute_scores(self):
         chunk_size = self.chunk_size
         n_chunks = len(self.sum_formulae) / chunk_size + 1
