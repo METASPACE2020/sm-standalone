@@ -1,7 +1,11 @@
 from pyIMS.image_measures.isotope_pattern_match import isotope_pattern_match
 from pyIMS.image_measures.isotope_image_correlation import isotope_image_correlation
 from pyIMS.image_measures.level_sets_measure import measure_of_chaos
+from pyIMS.hdf5.inMemoryIMS_hdf5 import inMemoryIMS_hdf5
+from pyIMS.ion_datacube import ion_datacube
+
 from pyMS.pyisocalc import pyisocalc
+
 from itertools import product
 import os
 import sys
@@ -9,6 +13,7 @@ import cPickle
 import numpy as np
 import matplotlib.image
 import logging
+import h5py
 
 import scipy.signal as signal
 
@@ -43,7 +48,7 @@ class Pipeline(object):
         self.print_results()
 
     def make2DImage(self, img):
-        result = np.empty(img.shape)
+        result = np.zeros(self.nrows * self.ncols)
         result[self.pixel_indices] = img
         return result.reshape((self.nrows, self.ncols))
 
@@ -220,10 +225,8 @@ class Pipeline(object):
         logging.info(str(n_processed) + "/" + str(len(self.sum_formulae)) + " sum formulae processed")
 
     def _calculate_dimensions(self):
-        from pyIMS.ion_datacube import ion_datacube
         cube = ion_datacube()
         cube.add_coords(self.coords)
-        cube.coord_to_index()
         self.nrows = cube.nRows
         self.ncols = cube.nColumns
         self.pixel_indices = cube.pixel_indices
@@ -236,7 +239,6 @@ class ReferencePipeline(Pipeline):
         return "reference"
 
     def load_data(self):
-        from pyIMS.hdf5.inMemoryIMS_hdf5 import inMemoryIMS_hdf5
         self.IMS_dataset = inMemoryIMS_hdf5(self.data_file)
         self.coords = self.IMS_dataset.coords
         self._calculate_dimensions()
@@ -259,6 +261,55 @@ class ReferencePipeline(Pipeline):
                     self.print_images(ion_datacube.xic, sum_formula, adduct)
 
         self.report_scoring_progress(len(self.sum_formulae))
+
+class inMemoryIMS_hdf5_low_mem(inMemoryIMS_hdf5):
+    def __init__(self, filename):
+        self.load_file(filename)
+
+    def load_file(self, filename, min_mz=0, max_mz=np.inf, min_int=0, index_range=[]):
+        self.hdf = h5py.File(filename, 'r')
+
+        def spectra_iter():
+            keys = index_range or map(int, self.hdf['/spectral_data'].keys())
+            for i in keys:
+                tmp_str = "/spectral_data/" + str(i)
+                mzs = self.hdf[tmp_str + '/centroid_mzs/'][()]
+                counts = self.hdf[tmp_str + '/centroid_intensities/'][()]
+                valid = np.where((mzs > min_mz) & (mzs < max_mz) & (counts > min_int))
+                counts = counts[valid]
+                mzs = mzs[valid]
+                yield (i, mzs, counts)
+
+        import reorder
+        data = reorder.sortDatasetByMass(spectra_iter())
+        self.index_list, self.mz_list, self.count_list, self.idx_list = data
+        self.coords = self.get_coords()
+        self.max_index = max(self.index_list)
+
+        cube = ion_datacube()
+        cube.add_coords(self.coords)
+        self.cube_pixel_indices = cube.pixel_indices
+        self.cube_n_row, self.cube_n_col = cube.nRows, cube.nColumns
+
+        self.mz_min = self.mz_list[0]
+        self.mz_max = self.mz_list[-1]
+        self.histogram_mz_axis = {}
+
+        # split binary searches into two stages for better locality
+        self.window_size = 1024
+        self.mz_sublist = self.mz_list[::self.window_size].copy()
+
+class LowMemReferencePipeline(ReferencePipeline):
+    def __init__(self, config):
+        super(LowMemReferencePipeline, self).__init__(config)
+
+    def algorithm_name(self):
+        return "reference_low_mem"
+
+    def load_data(self):
+        self.IMS_dataset = inMemoryIMS_hdf5_low_mem(self.data_file)
+        self.coords = self.IMS_dataset.coords
+        self._calculate_dimensions()
 
 #####################################################################################################################
 
@@ -296,7 +347,6 @@ def readImzML(filename, centroids=True):
             coords = (coords[0], coords[1], 0)
         yield Spectrum(i, mzs, ints, map(lambda x: x-1, coords))
 
-import h5py
 def readHDF5(filename, centroids=True):
     hdf = h5py.File(filename, 'r')
     for i in hdf['/spectral_data'].keys():
@@ -417,6 +467,8 @@ if __name__ == '__main__':
     config = json.loads(open(sys.argv[1]).read())
     if config['method'] == 'reference':
         pipeline = ReferencePipeline(config)
+    elif config['method'] == 'reference_low_mem':
+        pipeline = LowMemReferencePipeline(config)
     elif config['method'] == 'new':
         pipeline = NewPipeline(config)
     else:
