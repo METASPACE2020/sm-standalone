@@ -220,9 +220,13 @@ class Pipeline(object):
         logging.info(str(n_processed) + "/" + str(len(self.sum_formulae)) + " sum formulae processed")
 
     def _calculate_dimensions(self):
-        dim = np.amax(self.coords, axis=0)
-        self.nrows = int(dim[0] + 1)
-        self.ncols = int(dim[1] + 1)
+        from pyIMS.ion_datacube import ion_datacube
+        cube = ion_datacube()
+        cube.add_coords(self.coords)
+        cube.coord_to_index()
+        self.nrows = cube.nRows
+        self.ncols = cube.nColumns
+        self.pixel_indices = cube.pixel_indices
 
 class ReferencePipeline(Pipeline):
     def __init__(self, config):
@@ -234,9 +238,8 @@ class ReferencePipeline(Pipeline):
     def load_data(self):
         from pyIMS.hdf5.inMemoryIMS_hdf5 import inMemoryIMS_hdf5
         self.IMS_dataset = inMemoryIMS_hdf5(self.data_file)
-        self.coords = self.IMS_dataset.coords - 1
+        self.coords = self.IMS_dataset.coords
         self._calculate_dimensions()
-        self.pixel_indices = self.IMS_dataset.cube_pixel_indices
 
     def compute_scores(self):
         for i, sum_formula in enumerate(self.sum_formulae):
@@ -322,10 +325,9 @@ class NewPipeline(Pipeline):
         self.spectra = list(spectra)
 
         self.coords = np.zeros((len(self.spectra), 3))
-        for sp in self.spectra:
-            self.coords[sp.index, :] = sp.coords
+        for i, sp in enumerate(self.spectra):
+            self.coords[i, :] = sp.coords
         self._calculate_dimensions()
-        self.pixel_indices = np.array([sp.coords[0] * self.ncols + sp.coords[1] for sp in self.spectra])
 
     def compute_scores(self):
         chunk_size = self.chunk_size
