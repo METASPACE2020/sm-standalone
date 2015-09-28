@@ -3,6 +3,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+from colourmaps import viridis_colormap
+
 from pipelines import inMemoryIMS_low_mem
 
 # webserver
@@ -38,6 +40,8 @@ import io
 import os
 import numpy as np
 
+cmap = viridis_colormap()
+
 @app.route("/show_image/<mz>/<tol>")
 def generate_image(mz, tol):
     mz, tol = float(mz), float(tol)
@@ -46,7 +50,7 @@ def generate_image(mz, tol):
     if bottle.request.query.remove_hotspots:
         pc = np.percentile(img, 99)
         img[img > pc] = pc
-    plt.imsave(buf, img, format='png')
+    plt.imsave(buf, img, cmap=cmap, format='png')
     bottle.response.content_type = 'image/png'
     buf.seek(0, os.SEEK_END)
     bottle.response.content_length = buf.tell()

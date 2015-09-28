@@ -33,6 +33,9 @@ class Pipeline(object):
 
         self.chunk_size = 1000
 
+        from colourmaps import viridis_colormap
+        self.cmap = viridis_colormap()
+
         self.measure_tol = config['results_thresholds']['measure_tol']
         self.iso_corr_tol = config['results_thresholds']['iso_corr_tol']
         self.iso_ratio_tol = config['results_thresholds']['iso_ratio_tol']
@@ -61,10 +64,10 @@ class Pipeline(object):
             with open(filename_out,'w') as f_out:
                 img = self.make2DImage(imgs[i])
                 total_img += img
-                matplotlib.image.imsave(filename_out, img)
+                matplotlib.image.imsave(filename_out, img, cmap=self.cmap)
         
         filename_out = "{img_output_dir}/_{sum_formula}_{adduct}.png".format(**locals())
-        matplotlib.image.imsave(filename_out, total_img)
+        matplotlib.image.imsave(filename_out, total_img, cmap=self.cmap)
 
     # template method
     def compute_scores(self):
