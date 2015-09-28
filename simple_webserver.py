@@ -29,6 +29,7 @@ def show_form():
         <form action="/show_images" method="post">
             Formula: <input name="formula" type="text"><br/>
             Tolerance (ppm): <input name="tolerance" type="number" step="any" value="1.0"><br/>
+            Pyisocalc cutoff: <input name="pyisocalc_cutoff" type="number" step="any" value="1e-5"><br/>
             <input value="Show images" type="submit"><br/>
             <input type="checkbox" checked="true" name="hs_removal">Remove hotspots
         </form>'''
@@ -61,11 +62,13 @@ def show_images():
     formula = bottle.request.forms.get('formula')
     tolerance = bottle.request.forms.get('tolerance')
     hs_removal = bottle.request.forms.get('hs_removal')
+    cutoff = float(bottle.request.forms.get('pyisocalc_cutoff'))
     adducts = ['H', 'K', 'Na']
     isotope_patterns = {}
     for adduct in adducts:
         pattern = pyisocalc.isodist(formula + adduct, plot=False, sigma=0.01,
-                                    charges=1, resolution=200000, do_centroid=True)
+                                    charges=1, resolution=200000, cutoff=cutoff, do_centroid=True)
+
         mzs, intensities = pattern.get_spectrum(source='centroids')
         datacube = app.data.get_ion_image(np.array(mzs), float(tolerance))
         if hs_removal:
