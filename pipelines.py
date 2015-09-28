@@ -262,28 +262,45 @@ class ReferencePipeline(Pipeline):
 
         self.report_scoring_progress(len(self.sum_formulae))
 
-class inMemoryIMS_hdf5_low_mem(inMemoryIMS_hdf5):
+class inMemoryIMS_low_mem(inMemoryIMS_hdf5):
     def __init__(self, filename):
         self.load_file(filename)
 
     def load_file(self, filename, min_mz=0, max_mz=np.inf, min_int=0, index_range=[]):
-        self.hdf = h5py.File(filename, 'r')
-
-        def spectra_iter():
+        if filename.endswith('.hdf5'):
+            self.hdf = h5py.File(filename, 'r')
             keys = index_range or map(int, self.hdf['/spectral_data'].keys())
+        else:
+            self.imzml = ImzMLParser.ImzMLParser(filename)
+            keys = index_range or range(len(self.imzml.coordinates))
+
+        self.coords = np.zeros((len(keys), 3))
+
+        def spectra_iter_hdf5(keys):
             for i in keys:
                 tmp_str = "/spectral_data/" + str(i)
                 mzs = self.hdf[tmp_str + '/centroid_mzs/'][()]
                 counts = self.hdf[tmp_str + '/centroid_intensities/'][()]
+                self.coords[i, :] = self.hdf[tmp_str + '/coordinates']
                 valid = np.where((mzs > min_mz) & (mzs < max_mz) & (counts > min_int))
                 counts = counts[valid]
                 mzs = mzs[valid]
                 yield (i, mzs, counts)
 
+        def spectra_iter_imzml(keys):
+            for i in keys:
+                coords = self.imzml.coordinates[i]
+                mzs, counts = map(np.array, self.imzml.getspectrum(i))
+                if len(coords) == 2:
+                    coords = (coords[0], coords[1], 0)
+                self.coords[i, :] = coords
+                yield (i, mzs, counts)
+
+        sp_iter = spectra_iter_hdf5 if filename.endswith('.hdf5') else spectra_iter_imzml
+
         import reorder
-        data = reorder.sortDatasetByMass(spectra_iter())
+        data = reorder.sortDatasetByMass(sp_iter(keys))
         self.index_list, self.mz_list, self.count_list, self.idx_list = data
-        self.coords = self.get_coords()
         self.max_index = max(self.index_list)
 
         cube = ion_datacube()
@@ -307,7 +324,7 @@ class LowMemReferencePipeline(ReferencePipeline):
         return "reference_low_mem"
 
     def load_data(self):
-        self.IMS_dataset = inMemoryIMS_hdf5_low_mem(self.data_file)
+        self.IMS_dataset = inMemoryIMS_low_mem(self.data_file)
         self.coords = self.IMS_dataset.coords
         self._calculate_dimensions()
 
