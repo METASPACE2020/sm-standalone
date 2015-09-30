@@ -1,5 +1,6 @@
 numba>=0.20.0
 numpy>=1.9
-scipy>=0.16
+scipy>=0.13
 matplotlib>=1.4.3
 bottle>=0.12.8
+pyimzml
