@@ -16,6 +16,7 @@ import logging
 import h5py
 
 import scipy.signal as signal
+from matplotlib.colors import Normalize
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', datefmt='%H:%M:%S')
 
@@ -31,7 +32,7 @@ class Pipeline(object):
         self.iso_correlation_score = {}
         self.iso_ratio_score = {}
 
-        self.chunk_size = 1000
+        self.chunk_size = 200
 
         from colourmaps import viridis_colormap
         self.cmap = viridis_colormap()
@@ -51,9 +52,22 @@ class Pipeline(object):
         self.print_results()
 
     def make2DImage(self, img):
-        result = np.zeros(self.nrows * self.ncols)
+        # Regions with no data are denoted as -1.
+        # This allows to apply measure of chaos to the image
+        # and quickly filter the pixels out when producing PNGs
+        result = np.zeros(self.nrows * self.ncols) - 1
         result[self.pixel_indices] = img
         return result.reshape((self.nrows, self.ncols))
+
+    def save_image(self, img, filename_out):
+        mask = img >= 0
+        values = img[mask]
+        norm = Normalize(vmin=np.min(values), vmax=np.max(values))
+        colorized_img = np.zeros((self.nrows, self.ncols, 4))
+        colorized_img[mask] = self.cmap(norm(values))
+        # set alpha channel to 0 for pixels with no data
+        colorized_img[img < 0, -1] = 0
+        matplotlib.image.imsave(filename_out, colorized_img)
 
     def print_images(self, imgs, sum_formula, adduct):
         total_img = np.zeros((self.nrows, self.ncols))
@@ -64,10 +78,10 @@ class Pipeline(object):
             with open(filename_out,'w') as f_out:
                 img = self.make2DImage(imgs[i])
                 total_img += img
-                matplotlib.image.imsave(filename_out, img, cmap=self.cmap)
+                self.save_image(img, filename_out)
         
         filename_out = "{img_output_dir}/_{sum_formula}_{adduct}.png".format(**locals())
-        matplotlib.image.imsave(filename_out, total_img, cmap=self.cmap)
+        self.save_image(total_img, filename_out)
 
     # template method
     def compute_scores(self):
@@ -354,7 +368,7 @@ Spectrum = namedtuple('Spectrum', ['index', 'mzs', 'cumsum_int', 'coords'])
 class Spectrum(object):
     def __init__(self, i, mzs, intensities, coords):
         self.index = int(i)
-        self.mzs = mzs
+        self.mzs = np.asarray(mzs)
         self.cumsum_int = np.cumsum(np.concatenate(([0], intensities)))
         self.coords = np.asarray(coords)
 
@@ -451,7 +465,7 @@ class NewPipeline(Pipeline):
         lower, upper, lperm, uperm = mol_mz_intervals
         n = len(lower)
         
-        result = np.zeros((n, self.nrows * self.ncols))
+        result = np.zeros((n, len(spectra)))
 
         query_ids = np.zeros(n, dtype=np.int)
         intensities = np.zeros(n)

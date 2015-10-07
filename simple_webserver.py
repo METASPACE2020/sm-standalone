@@ -39,6 +39,7 @@ def show_form():
 import io
 import os
 import numpy as np
+from matplotlib.colors import Normalize
 
 cmap = viridis_colormap()
 
@@ -47,10 +48,17 @@ def generate_image(mz, tol):
     mz, tol = float(mz), float(tol)
     img = app.data.get_ion_image(np.array([mz]), tol).xic_to_image(0)
     buf = io.BytesIO()
+    mask = img >= 0
     if bottle.request.query.remove_hotspots:
-        pc = np.percentile(img, 99)
+        pc = np.percentile(img[mask], 99)
         img[img > pc] = pc
-    plt.imsave(buf, img, cmap=cmap, format='png')
+    values = img[mask]
+    norm = Normalize(vmin=np.min(values), vmax=np.max(values))
+    colorized_img = np.zeros((img.shape[0], img.shape[1], 4))
+    colorized_img[mask] = cmap(norm(values))
+    # set alpha channel to 0 for pixels with no data
+    colorized_img[img < 0, -1] = 0
+    plt.imsave(buf, colorized_img, format='png')
     bottle.response.content_type = 'image/png'
     buf.seek(0, os.SEEK_END)
     bottle.response.content_length = buf.tell()
