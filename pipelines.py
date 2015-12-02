@@ -31,6 +31,7 @@ class Pipeline(object):
         self.measure_value_score = {}
         self.iso_correlation_score = {}
         self.iso_ratio_score = {}
+        self.intensity = {} # total image intensity
 
         self.chunk_size = 200
 
@@ -108,6 +109,9 @@ class Pipeline(object):
         self.score_chaos(sum_formula, adduct, first_image)
         self.score_corr(sum_formula, adduct, all_images, intensities[1:])
         self.score_ratio(sum_formula, adduct, all_images, intensities)
+        if sum_formula not in self.intensity:
+            self.intensity[sum_formula] = {}
+        self.intensity[sum_formula][adduct] = sum(a.sum() for a in all_images)
 
     def hot_spot_removal(self, xics):
         for xic in xics:
@@ -213,7 +217,7 @@ class Pipeline(object):
             os.mkdir(output_dir)
         filename_out = '{}{}{}_full_results_{}.txt'.format(output_dir,os.sep,os.path.splitext(os.path.basename(filename_in))[0], self.algorithm_name())
         with open(filename_out,'w') as f_out:
-            f_out.write('sf,adduct,mz,moc,spec,spat,pass\n'.format())
+            f_out.write('sf,adduct,mz,moc,spat,spec,pass\n'.format())
             for sum_formula, adduct in product(self.sum_formulae, self.adducts):
                 moc_pass = self.passes_filters(sum_formula, adduct)
                 f_out.write('{},{},{},{},{},{},{}\n'.format(
@@ -227,12 +231,13 @@ class Pipeline(object):
 
         filename_out = '{}{}{}_pass_results_{}.txt'.format(output_dir,os.sep,os.path.splitext(os.path.basename(filename_in))[0], self.algorithm_name())
         with open(filename_out,'w') as f_out:
-            f_out.write('sf,adduct,mz,moc,spec,spat\n'.format())
+            f_out.write('sf,adduct,mz,intensity,moc,spat,spec\n'.format())
             for sum_formula, adduct in product(self.sum_formulae, self.adducts):
                 if self.passes_filters(sum_formula, adduct):
-                    f_out.write('{},{},{},{},{},{}\n'.format(
+                    f_out.write('{},{},{},{:.2e},{},{},{}\n'.format(
                         sum_formula, adduct,
                         self.mz_list[sum_formula][adduct][0][0],
+                        self.intensity[sum_formula][adduct],
                         self.measure_value_score[sum_formula][adduct],
                         self.iso_correlation_score[sum_formula][adduct],
                         self.iso_ratio_score[sum_formula][adduct]))
