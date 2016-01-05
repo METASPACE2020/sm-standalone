@@ -31,6 +31,7 @@ class Pipeline(object):
         self.measure_value_score = {}
         self.iso_correlation_score = {}
         self.iso_ratio_score = {}
+        self.monotone_pattern_score = {}
         self.intensity = {} # total image intensity
 
         self.chunk_size = 200
@@ -138,24 +139,35 @@ class Pipeline(object):
     def score_ratio(self, sum_formula, adduct, imgs, intensities):
         if not sum_formula in self.iso_ratio_score:
             self.iso_ratio_score[sum_formula] = {}
+            self.monotone_pattern_score[sum_formula] = {}
         self.iso_ratio_score[sum_formula][adduct] = isotope_pattern_match(imgs, intensities)
+
+        not_null = imgs[0] > 0
+        real_intensities = np.array([imgs[i][not_null].sum() for i in range(len(intensities))])
+        normalized = real_intensities / (real_intensities.max() + 1e-16)
+        if len(normalized) == 1:
+            self.monotone_pattern_score[sum_formula][adduct] = 0.0
+        else:
+            self.monotone_pattern_score[sum_formula][adduct] = max(np.diff(normalized).max(), 0.0)
 
     # config.file_inputs.database_file must contain one formula per line
     def load_queries(self):
-        def calculate_isotope_patterns(sum_formulae,adducts='',isocalc_sig=0.01,isocalc_resolution = 200000.,isocalc_do_centroid = True, charge=1):
+        def calculate_isotope_patterns(sum_formulae,adduct,isocalc_resolution,isocalc_do_centroid = True, charge=1):
             ### Generate a mz list of peak centroids for each sum formula with the given adduct
-            # todo - parse sum formula and adduct properly so that subtractions (losses) can be utilised (this code already exists somewhere)
             mz_list={}
-            for n, sum_formula in enumerate(sum_formulae):   
-                isotope_ms = pyisocalc.isodist(sum_formula + adduct,
-                                               plot=False,
-                                               sigma=isocalc_sig,
-                                               charges=charge,
-                                               resolution=isocalc_resolution,
-                                               do_centroid=isocalc_do_centroid)
+            for n, sum_formula in enumerate(sum_formulae):
+                sf = pyisocalc.SumFormulaParser.parse_string(str(sum_formula + adduct))
+                raw_pattern = pyisocalc.isodist(sf, cutoff=1e-4, charge=charge)
+                mz = raw_pattern.get_spectrum()[0][0]
+                # if mz < 200 or mz > 2000:
+                #   continue
+                fwhm = mz / isocalc_resolution # TODO: resolution = resolution(mz)
+                isotope_ms = pyisocalc.apply_gaussian(raw_pattern, fwhm, exact=False)
                 if not sum_formula in mz_list:
                      mz_list[sum_formula] = {}
-                mz_list[sum_formula][adduct] = isotope_ms.get_spectrum(source='centroids')
+                mzs, intensities = isotope_ms.get_spectrum(source='centroids')
+                order = intensities.argsort()[::-1][:5]
+                mz_list[sum_formula][adduct] = (mzs[order], intensities[order])
             return mz_list
 
         # Extract variables from config dict
@@ -183,7 +195,7 @@ class Pipeline(object):
                 mz_list_tmp = cPickle.load(open(load_file,'r'))
             else:
                 logging.info("calculating isotope patterns for adduct %s" % adduct)
-                mz_list_tmp = calculate_isotope_patterns(self.sum_formulae,adducts=(adduct,),isocalc_sig=isocalc_sig,isocalc_resolution=isocalc_resolution,charge=charge)
+                mz_list_tmp = calculate_isotope_patterns(self.sum_formulae,adduct,isocalc_resolution=isocalc_resolution,charge=charge)
                 if db_dump_folder != "":
                     if os.path.isdir(db_dump_folder)==False:
                         os.mkdir(db_dump_folder)
@@ -217,30 +229,32 @@ class Pipeline(object):
             os.mkdir(output_dir)
         filename_out = '{}{}{}_full_results_{}.txt'.format(output_dir,os.sep,os.path.splitext(os.path.basename(filename_in))[0], self.algorithm_name())
         with open(filename_out,'w') as f_out:
-            f_out.write('sf,adduct,mz,moc,spat,spec,pass\n'.format())
+            f_out.write('sf,adduct,mz,moc,spat,spec,decr,pass\n'.format())
             for sum_formula, adduct in product(self.sum_formulae, self.adducts):
                 moc_pass = self.passes_filters(sum_formula, adduct)
-                f_out.write('{},{},{},{},{},{},{}\n'.format(
+                f_out.write('{},{},{},{},{},{},{},{}\n'.format(
                         sum_formula,
                         adduct,
                         self.mz_list[sum_formula][adduct][0][0],
                         self.measure_value_score[sum_formula][adduct],
                         self.iso_correlation_score[sum_formula][adduct],
                         self.iso_ratio_score[sum_formula][adduct],
+                        self.monotone_pattern_score[sum_formula][adduct],
                         moc_pass)) 
 
         filename_out = '{}{}{}_pass_results_{}.txt'.format(output_dir,os.sep,os.path.splitext(os.path.basename(filename_in))[0], self.algorithm_name())
         with open(filename_out,'w') as f_out:
-            f_out.write('sf,adduct,mz,intensity,moc,spat,spec\n'.format())
+            f_out.write('sf,adduct,mz,intensity,moc,spat,spec,decr\n'.format())
             for sum_formula, adduct in product(self.sum_formulae, self.adducts):
                 if self.passes_filters(sum_formula, adduct):
-                    f_out.write('{},{},{},{:.2e},{},{},{}\n'.format(
+                    f_out.write('{},{},{},{:.2e},{},{},{},{}\n'.format(
                         sum_formula, adduct,
                         self.mz_list[sum_formula][adduct][0][0],
                         self.intensity[sum_formula][adduct],
                         self.measure_value_score[sum_formula][adduct],
                         self.iso_correlation_score[sum_formula][adduct],
-                        self.iso_ratio_score[sum_formula][adduct]))
+                        self.iso_ratio_score[sum_formula][adduct],
+                        self.monotone_pattern_score[sum_formula][adduct]))
 
     def report_scoring_progress(self, n_processed):
         #logging.info(str(round(float(n_processed) * 100.0 / len(self.sum_formulae), 2)) + "% sum formulae processed")

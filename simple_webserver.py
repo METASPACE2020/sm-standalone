@@ -32,6 +32,8 @@ def show_form():
             Formula: <input name="formula" type="text"><br/>
             Tolerance (ppm): <input name="tolerance" type="number" step="any" value="1.0"><br/>
             Pyisocalc cutoff: <input name="pyisocalc_cutoff" type="number" step="any" value="1e-5"><br/>
+            Resolution: <input name="resolution" type="number" step="any" value="200000"><br/>
+            Points per FWHM: <input name="pts" type="number" step="1" value="10"></br>
             <input value="Show images" type="submit"><br/>
             <input type="checkbox" checked="true" name="hs_removal">Remove hotspots
         </form>'''
@@ -72,17 +74,21 @@ from pyIMS.image_measures.level_sets_measure import measure_of_chaos
 @app.route("/show_images", method="post")
 def show_images():
     formula = bottle.request.forms.get('formula')
-    tolerance = bottle.request.forms.get('tolerance')
+    tolerance = float(bottle.request.forms.get('tolerance'))
     hs_removal = bottle.request.forms.get('hs_removal')
+    resolution = float(bottle.request.forms.get('resolution'))
+    pts = int(bottle.request.forms.get('pts'))
     cutoff = float(bottle.request.forms.get('pyisocalc_cutoff'))
     adducts = ['H', 'K', 'Na']
     isotope_patterns = {}
     for adduct in adducts:
-        pattern = pyisocalc.isodist(formula + adduct, plot=False, sigma=0.01,
-                                    charges=1, resolution=200000, cutoff=cutoff, do_centroid=True)
+        sf = pyisocalc.SumFormulaParser.parse_string(formula + adduct)
+        raw_pattern = pyisocalc.isodist(sf, cutoff)
+        fwhm = raw_pattern.get_spectrum()[0][0] / resolution
+        pattern = pyisocalc.apply_gaussian(raw_pattern, fwhm, pts, exact=True)
 
         mzs, intensities = pattern.get_spectrum(source='centroids')
-        datacube = app.data.get_ion_image(np.array(mzs), float(tolerance))
+        datacube = app.data.get_ion_image(np.array(mzs), tolerance)
         if hs_removal:
             for img in datacube.xic:
                 pc = np.percentile(img, 99)
@@ -91,11 +97,12 @@ def show_images():
         chaos = 1 - measure_of_chaos(datacube.xic_to_image(0), 30, interp=False)[0]
         if chaos == 1: chaos = 0
 
+        iso_corr = isotope_pattern_match(datacube.xic, intensities)
+
         img_corr = 1.0 # return 1 if there's a single peak
         if len(intensities[1:]) > 1:
             img_corr = isotope_image_correlation(datacube.xic, weights=intensities[1:])
 
-        iso_corr = isotope_pattern_match(datacube.xic, intensities)
         stats = {'measure of chaos': chaos,
                  'image correlation score': img_corr,
                  'isotope pattern score': iso_corr}
