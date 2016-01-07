@@ -2,7 +2,13 @@ import matplotlib
 matplotlib.use('Agg')
 import h5py
 import numpy as np
+import logging
+
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
+from colourmaps import viridis_colormap
+viridis = viridis_colormap()
+
 import os
 
 from pyMS.pyisocalc import pyisocalc
@@ -87,6 +93,7 @@ def generate_summary_spectrum3(mz_axis, imzml):
         mean_spectrum[bins] += intensities
         frequencies[bins] += 1
     mean_spectrum[-2] += mean_spectrum[-1]
+    mean_spectrum /= len(imzml.coordinates)
     return mz_axis, mean_spectrum[:-1], frequencies[:-1]
 
 #### computing resolution estimates ####
@@ -165,8 +172,10 @@ def get_peaks(mz_axis, total_intensities, indices):
         max_delta = (k + 2) / 2
         size = total_intensities.shape[0]
         if index < 1 or index > size - 1: break
-        go_to_left = total_intensities[index - 1] > total_intensities[index]
-        go_to_right = total_intensities[index + 1] > total_intensities[index]
+        delta_left = total_intensities[index - 1] - total_intensities[index]
+        delta_right = total_intensities[index + 1] - total_intensities[index]
+        go_to_left = delta_left > 0 and delta_left > delta_right * 10
+        go_to_right = delta_right > 0 and delta_right > delta_left * 10
         if go_to_left and go_to_right:
             break
         step = -1 if go_to_left else 1
@@ -180,8 +189,12 @@ def get_peaks(mz_axis, total_intensities, indices):
         r = top
         while r + 1 < size and total_intensities[r + 1] <= total_intensities[r] and total_intensities[r + 1] > 0:
             r += 1
+        if r + 1 < size and total_intensities[r + 1] == 0:
+            r += 1
         l = top
         while l > 0 and total_intensities[l - 1] <= total_intensities[l] and total_intensities[l - 1] > 0:
+            l -= 1
+        if l > 0 and total_intensities[l - 1] == 0:
             l -= 1
         if total_intensities[top] == 0.0:
             break
@@ -266,10 +279,23 @@ class SpectralMatch(object):
         self.emp_intensities = np.array([p.top_intensity for p in self.peaks])
         self.ips = isotope_pattern_score(self.emp_intensities, self.theor_ints)
         self._resolution = resolution_func
-        
+
+        self.mzs = mzs
+
     @property
     def peak_count(self):
         return len(self.peaks)
+
+    def mz_interval_bins(self, k, n_bins=15):
+        if k < self.peak_count:
+            return [self.peaks[k].leftmost_bin, self.peaks[k].rightmost_bin]
+
+        central_bin = self.mzs.searchsorted(self.theor_mzs[k])
+        return [central_bin - n_bins/2, central_bin + n_bins/2]
+
+    def mz_interval(self, k, n_bins=15):
+        l, r = self.mz_interval_bins(k, n_bins)
+        return [self.mzs[l], self.mzs[r]]
     
     @property
     def resolution(self):
@@ -279,10 +305,17 @@ class SpectralMatch(object):
     def isotope_pattern_score(self):
         return self.ips
     
+    def image_correlation(self, images):
+        l = self.peak_count
+        if l < 2:
+            return np.NaN
+        l = min(l, images.shape[0])
+        return isotope_image_correlation(images[:l, :], weights=self.theor_ints[1:l])
+
     def __str__(self):
         return " + ".join((self.formula, self.adduct))
 
-def get_images(matches, imzml, n_peak_images, mz_axis, n_bins=9):
+def _get_images(matches, imzml, n_peak_images, n_bins):
     intervals = []
     for m in matches:
         assert len(m.theor_mzs) >= n_peak_images
@@ -293,11 +326,8 @@ def get_images(matches, imzml, n_peak_images, mz_axis, n_bins=9):
             if k == n_peak_images: # enough!
                 break
         while k < n_peak_images:
-            mz = m.theor_mzs[k]
-            central_bin = mz_axis.searchsorted(mz)
-            intervals.append([mz_axis[central_bin - n_bins/2], mz_axis[central_bin + n_bins/2]])
+            intervals.append(m.mz_interval(k, n_bins))
             k += 1
-    #intervals = [p.mz_interval for m in matches for p in m.peaks]
     lower, upper = map(np.array, zip(*intervals))
     
     nr = imzml.imzmldict["max count of pixels x"]
@@ -314,98 +344,30 @@ def get_images(matches, imzml, n_peak_images, mz_axis, n_bins=9):
         ridx = mzs.searchsorted(upper, 'r')
         images[:, k] = cumul_ints[ridx] - cumul_ints[lidx]
     return images, nc, nr
- 
-
-# main program
-
-import logging
-reload(logging)
-logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', datefmt='%H:%M:%S')
-
-import sys
-if sys.argv[1].endswith(".h5"):
-    raw = h5py.File(sys.argv[1])
-elif sys.argv[1].endswith(".RAW"):
-    raw = str(sys.argv[1])
-else:
-    print "only .h5 and .RAW are supported"
-    sys.exit(1)
-
-imzml = ImzMLParser(sys.argv[2])
-formulas_fn = sys.argv[3]
-pdf_filename = sys.argv[4]
-
-n_spectra = 25
-logging.info("estimating resolution from %d random raw spectra..." % n_spectra)
-resolution_func = resolution_estimate(raw)
-logging.info("resolution is %d @ 200" % round(resolution_func(200)))
-
-mz_range = imzml.get_mz_range()
-logging.info("m/z range: %f .. %f" % mz_range)
-
-logging.info("generating isotope patterns...")
-patterns = generate_patterns(formulas_fn, resolution_func, mz_range)
-
-logging.info("computing mean spectrum...")
-mzs, mean_intensities = read_mean_spectrum(raw)
-
-logging.info("computing mean spectrum from centroided data...")
-mzs, intensities, frequencies = generate_summary_spectrum3(mzs, imzml)
-
-logging.info("finding candidate molecules")
-matches = []
-molecules = find_clean_molecules(mzs, intensities, patterns, min_peaks=3, min_intensity_share=0.99,\
-                                 min_iso_corr=0.95)
-
-for f, a in sorted(molecules, key=lambda key:patterns[key][0][0]):
-    matches.append(SpectralMatch(f, a, patterns, mzs, intensities, resolution_func))
-    
-logging.info("extracting molecular images from imzml...")
-n_bins = 15
-n = 5
-matches = [m for m in matches if len(m.theor_mzs) >= n]
-images, nrow, ncol = get_images(matches, imzml, n, mzs, n_bins)
-
-from matplotlib import gridspec
-from colourmaps import viridis_colormap
 
 def set_axis_color(ax, c):
     ax.tick_params(color=c, labelcolor=c)
     for spine in ax.spines.values():
         spine.set_edgecolor(c)
 
-viridis = viridis_colormap()
-offset = 0
+class MolecularImage(object):
+    def __init__(self, n_peak_images, match, images, nrow, ncol,
+                 mzs, intensities, mean_intensities, frequencies,
+                 figsize=(8.27, 11.69), dpi=100):
+        self.formula = match.formula
+        self.adduct = match.adduct
 
-from matplotlib.backends.backend_pdf import PdfPages
+        plt.ioff()
 
-logging.info("saving results to pdf...")
-
-plt.ioff()
-
-with PdfPages(pdf_filename) as pdf:
-    for match in sorted(matches, key = lambda m: m.theor_mzs[0]):
-        k = match.peak_count
-        if k < 3:
-            offset += n
-            continue
-
-        l = min(k, len(match.theor_ints))
-        try:
-            ims = isotope_image_correlation(images[offset : offset + l, :], weights=match.theor_ints[1:l])
-        except TypeError:
-            ims = -1 # TODO
-
-        if ims < 0.7:
-            offset += n
-            continue
-
-        #fig = plt.figure(figsize=(3.3 * n, 13))
-        fig = plt.figure(figsize=(8.27, 11.69), dpi=100) # A4 format
+        self.figure = plt.figure(figsize=figsize, dpi=dpi) # A4 format
+        n = n_peak_images
+        order = 'C'
         for k in range(n):
             gs = gridspec.GridSpec(6, n, height_ratios=[3, 5, 2.5, 2.5, 2.5, 1.5])
 
-            img = images[offset + k,:].reshape((nrow, ncol))
+            img = images[k, :].reshape((nrow, ncol))
+            if nrow < ncol:
+                img = img.T
             perc = np.percentile(img, 99)
             img[img > perc] = perc
             plt.subplot(gs[n + k])
@@ -414,12 +376,10 @@ with PdfPages(pdf_filename) as pdf:
             plt.axis('off', frameon=False)
 
             if k < match.peak_count:
-                l, r = match.peaks[k].leftmost_bin, match.peaks[k].rightmost_bin
+                l, r = match.mz_interval_bins(k)
                 ax_handler = lambda ax: None
             else:
-                central_bin = mzs.searchsorted(match.theor_mzs[k])
-                l = central_bin - n_bins/2
-                r = central_bin + n_bins/2 - 1
+                l, r = match.mz_interval_bins(k)
                 ax_handler = lambda ax: set_axis_color(ax, 'red')
 
             # plot mean spectrum
@@ -445,11 +405,13 @@ with PdfPages(pdf_filename) as pdf:
             ax.axvline(match.theor_mzs[k], color='green')
             ax_handler(ax)
 
-        offset += n
-        #plt.show()
-        
-        emp_ints = match.emp_intensities / match.emp_intensities.sum()
-        k = match.peak_count
+        k = l = match.peak_count
+        ims = match.image_correlation(images)
+        if l > 0:
+            emp_ints = match.emp_intensities / match.emp_intensities.sum()
+        else:
+            emp_ints = np.array([img.sum() for img in images])
+            emp_ints /= emp_ints.sum()
         txt = '''
         {0} + {1}
         First {2} peaks are clean
@@ -468,10 +430,100 @@ with PdfPages(pdf_filename) as pdf:
                    ims,
                    match.theor_ints[:k].sum() / match.theor_ints.sum())
         
-        fig.text(.1, .85, txt)
-        fig.tight_layout()
+        self.figure.text(.1, .85, txt)
+        self.figure.tight_layout()
 
-        pdf.savefig(fig)
-        plt.close(fig)
+        plt.ion()
 
-logging.info("done!")
+    def saveToPdf(self, pdf_object):
+        pdf.savefig(self.figure)
+        plt.close(self.figure)
+
+class CleanImageSearch(object):
+    def __init__(self, imzml_filename, raw_data_filename, formulas_filename):
+        self.imzml = ImzMLParser(imzml_filename)
+        self.formulas_fn = formulas_filename
+        if raw_data_filename.endswith(".h5"):
+            self.raw = h5py.File(raw_data_filename)
+        elif raw_data_filename.endswith(".RAW"):
+            self.raw = str(raw_data_filename)
+        else:
+            raise ValueError("only .h5 and .RAW are supported")
+
+        n_spectra = 25
+        logging.info("estimating resolution from %d random raw spectra..." % n_spectra)
+        self.resolution_func = resolution_estimate(self.raw, n_spectra)
+        logging.info("resolution is %d @ 200" % round(self.resolution_func(200)))
+
+        self.mz_range = self.imzml.get_mz_range()
+        logging.info("m/z range: %f .. %f" % self.mz_range)
+
+        logging.info("generating isotope patterns...")
+        self.patterns = generate_patterns(self.formulas_fn, self.resolution_func, self.mz_range)
+
+        logging.info("computing mean spectrum...")
+        mzs, self.mean_intensities = read_mean_spectrum(self.raw)
+
+        logging.info("computing mean spectrum from centroided data...")
+        self.mzs, self.intensities, self.frequencies = generate_summary_spectrum3(mzs, self.imzml)
+
+        self.n = 5
+
+    def find_good_matches(self,
+            min_peaks=3, min_intensity_share=0.99, min_iso_corr=0.95):
+        result = find_clean_molecules(self.mzs, self.intensities, self.patterns,
+                                      min_peaks=min_peaks,
+                                      min_intensity_share=min_intensity_share,
+                                      min_iso_corr=min_iso_corr)
+        molecules = sorted(result, key=lambda k:self.patterns[k][0][0])
+
+        matches = []
+        for f, a in molecules:
+            match = SpectralMatch(f, a, self.patterns, self.mzs, self.intensities, self.resolution_func)
+            if len(match.theor_mzs) < self.n:
+                continue
+            matches.append(match)
+        return sorted(matches, key = lambda m: m.theor_mzs[0])
+
+    def extract_images(self, formulas, min_img_corr=0.7, n_bins=15, **kwargs):
+        if len(formulas) == 0:
+            return []
+        if isinstance(formulas[0], tuple) and isinstance(formulas[0][0], str):
+            formulas = [SpectralMatch(f, a, self.patterns,\
+                                      self.mzs, self.intensities, self.resolution_func)\
+                        for f, a in formulas]
+        images, nrow, ncol = _get_images(formulas, self.imzml, self.n, n_bins)
+        molecular_images = []
+        offset = 0
+        for m in formulas:
+            ims = m.image_correlation(images[offset : offset + self.n, :])
+            if ims < min_img_corr:
+                offset += self.n
+                continue
+            img = MolecularImage(self.n, m, images[offset : offset + self.n, :], nrow, ncol,
+                    self.mzs, self.intensities, self.mean_intensities, self.frequencies, **kwargs)
+            molecular_images.append(img)
+            offset += self.n
+        return molecular_images
+
+from matplotlib.backends.backend_pdf import PdfPages
+
+if __name__ == '__main__':
+    import sys
+    reload(logging)
+    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', datefmt='%H:%M:%S')
+
+    search = CleanImageSearch(sys.argv[2], sys.argv[1], sys.argv[3])
+    pdf_filename = sys.argv[4]
+
+    logging.info("finding candidate molecules")
+    matches = search.find_good_matches(min_peaks=3, min_intensity_share=0.99, min_iso_corr=0.95)
+    logging.info("extracting molecular images from imzml...")
+    images = search.extract_images(matches)
+
+    logging.info("saving results to pdf...")
+    with PdfPages(pdf_filename) as pdf:
+        for img in images:
+            img.saveToPdf(pdf)
+
+    logging.info("done!")
