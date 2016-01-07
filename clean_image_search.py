@@ -3,13 +3,22 @@ matplotlib.use('Agg')
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 from pyMS.pyisocalc import pyisocalc
 from pyIMS.inMemoryIMS import inMemoryIMS
 from pyIMS.image_measures.isotope_image_correlation import *
 from pyimzml.ImzMLParser import ImzMLParser
 
-def read_mean_spectrum(raw_h5):
+def read_mean_spectrum(raw_data):
+    if isinstance(raw_data, h5py.File):
+        return read_mean_spectrum_h5(raw_data)
+    elif isinstance(raw_data, str) and raw_data.endswith(".RAW"):
+        return read_mean_spectrum_raw(raw_data)
+    else:
+        return NotImplemented
+
+def read_mean_spectrum_h5(raw_h5):
     for k in raw_h5['Regions'].keys():
         try:
             mzs = raw_h5['Regions'][k]['SamplePositions/SamplePositions'][:]
@@ -19,12 +28,39 @@ def read_mean_spectrum(raw_h5):
             pass
     return mzs, total_intensities
 
-def read_random_spectrum(raw_h5):
+def read_mean_spectrum_raw(raw_data_fn):
+    os.system("go run unthermo_mean_spectrum.go -raw " + raw_data_fn + " > /tmp/mean.spectrum")
+    return read_spectrum_from_text("/tmp/mean.spectrum")
+
+def read_random_spectrum(raw_data):
+    if isinstance(raw_data, h5py.File):
+        return read_random_spectrum_h5(raw_data)
+    elif isinstance(raw_data, str) and raw_data.endswith(".RAW"):
+        return read_random_spectrum_raw(raw_data)
+    else:
+        return NotImplemented
+
+def read_random_spectrum_h5(raw_h5):
     spots = raw_h5['Spots'].keys()
     spot = np.random.choice(spots, 1)[0]
     mzs = raw_h5['Spots/' + spot + '/InitialMeasurement/SamplePositions/SamplePositions'][:]
     intensities = raw_h5['Spots/' + spot + '/InitialMeasurement/Intensities'][:]
     return mzs, intensities
+
+def read_random_spectrum_raw(raw_data_fn):
+    os.system("go run unthermo_random_spectrum.go -raw " + raw_data_fn + " > /tmp/random.spectrum")
+    return read_spectrum_from_text("/tmp/random.spectrum")
+
+def read_spectrum_from_text(fn):
+    with open(fn) as f:
+        lines = f.readlines()
+    mzs = []
+    intensities = []
+    for l in lines:
+        mz, intensity = l.split()
+        mzs.append(float(mz))
+        intensities.append(float(intensity))
+    return np.array(mzs), np.array(intensities)
 
 def generate_summary_spectrum_lowmem(ppm, imzml):
     mz_min, mz_max = imzml.get_mz_range()
@@ -77,11 +113,11 @@ def resolution_at_peak(peak_pos, mzs, intensities):
 from pyMS.centroid_detection import gradient
 from sklearn.linear_model import RANSACRegressor
 
-def resolution_estimate(raw_h5, n_spectra=25):
+def resolution_estimate(raw_data, n_spectra=25):
     slopes = []
     intercepts = []
     for i in range(n_spectra):
-        mzs, intensities = read_random_spectrum(raw_h5)
+        mzs, intensities = read_random_spectrum(raw_data)
         peak_positions = np.array(gradient(mzs, intensities)[-1])
         intensities_at_peaks = intensities[peak_positions]
         high_intensity_threshold = np.percentile(intensities_at_peaks, 40)
@@ -150,11 +186,14 @@ def get_peaks(mz_axis, total_intensities, indices):
         if total_intensities[top] == 0.0:
             break
         u, v = total_intensities[l] / total_intensities[top], total_intensities[r] / total_intensities[top]
-        if max(u, v) > 0.2:
+
+        # don't allow peaks to overlap
+        if max(u, v) > 0.1:
             break
 
-        #if prev_top_intensity and total_intensities[top] > prev_top_intensity:
-        #    break
+        # ensure that intensities are strictly decreasing
+        if prev_top_intensity and total_intensities[top] > prev_top_intensity:
+            break
         prev_top_intensity = total_intensities[top]
         peaks.append(Peak(l, r, top, mz_axis, total_intensities))
     return peaks
@@ -265,7 +304,9 @@ def get_images(matches, imzml, n_peak_images, mz_axis, n_bins=9):
     nc = imzml.imzmldict["max count of pixels y"]
 
     images = np.zeros((len(intervals), nr * nc))
-    for i, (row, col, _) in enumerate(imzml.coordinates):
+    for i, coords in enumerate(imzml.coordinates):
+        row = coords[0]
+        col = coords[1]
         mzs, intensities = map(np.array, imzml.getspectrum(i))
         cumul_ints = np.concatenate(([0.0], np.cumsum(intensities)))
         k = (col - 1) * nr + (row - 1)
@@ -282,14 +323,21 @@ reload(logging)
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', datefmt='%H:%M:%S')
 
 import sys
-h5 = h5py.File(sys.argv[1])
+if sys.argv[1].endswith(".h5"):
+    raw = h5py.File(sys.argv[1])
+elif sys.argv[1].endswith(".RAW"):
+    raw = str(sys.argv[1])
+else:
+    print "only .h5 and .RAW are supported"
+    sys.exit(1)
+
 imzml = ImzMLParser(sys.argv[2])
 formulas_fn = sys.argv[3]
 pdf_filename = sys.argv[4]
 
 n_spectra = 25
 logging.info("estimating resolution from %d random raw spectra..." % n_spectra)
-resolution_func = resolution_estimate(h5)
+resolution_func = resolution_estimate(raw)
 logging.info("resolution is %d @ 200" % round(resolution_func(200)))
 
 mz_range = imzml.get_mz_range()
@@ -298,14 +346,16 @@ logging.info("m/z range: %f .. %f" % mz_range)
 logging.info("generating isotope patterns...")
 patterns = generate_patterns(formulas_fn, resolution_func, mz_range)
 
+logging.info("computing mean spectrum...")
+mzs, mean_intensities = read_mean_spectrum(raw)
+
 logging.info("computing mean spectrum from centroided data...")
-mzs, _ = read_mean_spectrum(h5)
 mzs, intensities, frequencies = generate_summary_spectrum3(mzs, imzml)
 
 logging.info("finding candidate molecules")
 matches = []
-molecules = find_clean_molecules(mzs, intensities, patterns, min_peaks=3, min_intensity_share=0.97,\
-                                 min_iso_corr=0.9)
+molecules = find_clean_molecules(mzs, intensities, patterns, min_peaks=3, min_intensity_share=0.99,\
+                                 min_iso_corr=0.95)
 
 for f, a in sorted(molecules, key=lambda key:patterns[key][0][0]):
     matches.append(SpectralMatch(f, a, patterns, mzs, intensities, resolution_func))
@@ -323,8 +373,6 @@ def set_axis_color(ax, c):
     ax.tick_params(color=c, labelcolor=c)
     for spine in ax.spines.values():
         spine.set_edgecolor(c)
-        
-_, mean_intensities = read_mean_spectrum(h5)
 
 viridis = viridis_colormap()
 offset = 0
@@ -348,9 +396,9 @@ with PdfPages(pdf_filename) as pdf:
         except TypeError:
             ims = -1 # TODO
 
-        #if ims < 0.7:
-        #    offset += n
-        #    continue
+        if ims < 0.7:
+            offset += n
+            continue
 
         #fig = plt.figure(figsize=(3.3 * n, 13))
         fig = plt.figure(figsize=(8.27, 11.69), dpi=100) # A4 format
