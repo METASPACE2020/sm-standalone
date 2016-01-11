@@ -86,8 +86,8 @@ def generate_correlation_plot(formula, adduct, mzs, intensities, tol):
     base_intensities = images[0]
 
     plt.figure(figsize=(10, 10))
-    plt.xlabel("base peak intensities")
-    plt.ylabel("other peak intensities")
+    plt.xlabel("sqrt( base peak intensities )")
+    plt.ylabel("sqrt( other peak intensities )")
     plt.title(formula + " + " + adduct + " (m/z={:.4f})".format(mzs[0]))
 
     colors = ['blue', 'red', 'green', 'purple', 'black']
@@ -111,6 +111,7 @@ def generate_correlation_plot(formula, adduct, mzs, intensities, tol):
     for handle in lgnd.legendHandles:
         handle._legmarker.set_markersize(6)
     plt.savefig(buf)
+    plt.close()
 
     bottle.response.content_type = 'image/png'
     buf.seek(0, os.SEEK_END)
@@ -122,6 +123,12 @@ from pyIMS.image_measures.isotope_pattern_match import isotope_pattern_match
 from pyIMS.image_measures.isotope_image_correlation import isotope_image_correlation
 from pyIMS.image_measures.level_sets_measure import measure_of_chaos
 
+@app.route("/show/<formula>")
+def show_images_get(formula):
+    tolerance = float(bottle.request.params.get('ppm', 5.0))
+    resolution = float(bottle.request.params.get('resolution', 1e5))
+    return _generate_page(formula, tolerance, True, resolution, 10, 0.001)
+
 @app.route("/show_images", method="post")
 def show_images():
     formula = bottle.request.forms.get('formula')
@@ -130,6 +137,9 @@ def show_images():
     resolution = float(bottle.request.forms.get('resolution'))
     pts = int(bottle.request.forms.get('pts'))
     cutoff = float(bottle.request.forms.get('pyisocalc_cutoff'))
+    return _generate_page(formula, tolerance, hs_removal, resolution, pts, cutoff)
+
+def _generate_page(formula, tolerance, hs_removal, resolution, pts, cutoff):
     adducts = ['H', 'K', 'Na']
     isotope_patterns = {}
     for adduct in adducts:
