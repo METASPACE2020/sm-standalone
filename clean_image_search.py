@@ -351,6 +351,13 @@ def set_axis_color(ax, c):
         spine.set_edgecolor(c)
 
 class MolecularImage(object):
+    def __init__(self, images, nrow, ncol, formula, adduct, patterns):
+        self.images = [img.reshape((nrow, ncol)) for img in images]
+        self.formula = formula
+        self.adduct = adduct
+        self.mzs, self.intensities = patterns[(self.formula, self.adduct)]
+
+class MolecularFigure(object):
     def __init__(self, n_peak_images, match, images, nrow, ncol,
                  mzs, intensities, mean_intensities, frequencies,
                  figsize=(8.27, 11.69), dpi=100):
@@ -485,26 +492,43 @@ class CleanImageSearch(object):
             matches.append(match)
         return sorted(matches, key = lambda m: m.theor_mzs[0])
 
-    def extract_images(self, formulas, min_img_corr=0.7, n_bins=15, **kwargs):
+    def _sf2m(self, formulas):
         if len(formulas) == 0:
             return []
         if isinstance(formulas[0], tuple) and isinstance(formulas[0][0], str):
-            formulas = [SpectralMatch(f, a, self.patterns,\
-                                      self.mzs, self.intensities, self.resolution_func)\
-                        for f, a in formulas]
+            return [SpectralMatch(f, a, self.patterns, self.mzs, self.intensities, self.resolution_func)\
+                    for f, a in formulas]
+        else:
+            return formulas
+
+    def extract_images(self, formulas, n_bins=15):
+        formulas = self._sf2m(formulas)
+        raw_images, nrow, ncol = _get_images(formulas, self.imzml, self.n, n_bins)
+        offset = 0
+        images = []
+        for m in formulas:
+            l = min(self.n, m.peak_count)
+            images.append(MolecularImage(raw_images[offset : offset + l, :],
+                                         nrow, ncol,
+                                         m.formula, m.adduct, self.patterns))
+            offset += self.n
+        return images
+
+    def extract_figures(self, formulas, min_img_corr=0.7, n_bins=15, **kwargs):
+        formulas = self._sf2m(formulas)
         images, nrow, ncol = _get_images(formulas, self.imzml, self.n, n_bins)
-        molecular_images = []
+        figures = []
         offset = 0
         for m in formulas:
             ims = m.image_correlation(images[offset : offset + self.n, :])
             if ims < min_img_corr:
                 offset += self.n
                 continue
-            img = MolecularImage(self.n, m, images[offset : offset + self.n, :], nrow, ncol,
+            img = MolecularFigure(self.n, m, images[offset : offset + self.n, :], nrow, ncol,
                     self.mzs, self.intensities, self.mean_intensities, self.frequencies, **kwargs)
-            molecular_images.append(img)
+            figures.append(img)
             offset += self.n
-        return molecular_images
+        return figures
 
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -519,11 +543,11 @@ if __name__ == '__main__':
     logging.info("finding candidate molecules")
     matches = search.find_good_matches(min_peaks=3, min_intensity_share=0.99, min_iso_corr=0.95)
     logging.info("extracting molecular images from imzml...")
-    images = search.extract_images(matches)
+    figures = search.extract_figures(matches)
 
     logging.info("saving results to pdf...")
     with PdfPages(pdf_filename) as pdf:
-        for img in images:
-            img.saveToPdf(pdf)
+        for fig in figures:
+            fig.saveToPdf(pdf)
 
     logging.info("done!")

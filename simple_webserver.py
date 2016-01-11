@@ -49,6 +49,8 @@ cmap = viridis_colormap()
 def generate_image(mz, tol):
     mz, tol = float(mz), float(tol)
     img = app.data.get_ion_image(np.array([mz]), tol).xic_to_image(0)
+    if img.shape[0] > img.shape[1]:
+        img = img.T
     buf = io.BytesIO()
     mask = img >= 0
     if bottle.request.query.remove_hotspots:
@@ -61,6 +63,55 @@ def generate_image(mz, tol):
     # set alpha channel to 0 for pixels with no data
     colorized_img[img < 0, -1] = 0
     plt.imsave(buf, colorized_img, format='png')
+    bottle.response.content_type = 'image/png'
+    buf.seek(0, os.SEEK_END)
+    bottle.response.content_length = buf.tell()
+    buf.seek(0)
+    return buf
+
+@app.route("/correlation_plot/<formula>/<adduct>/<mzs>/<intensities>/<tol>")
+def generate_correlation_plot(formula, adduct, mzs, intensities, tol):
+    mzs = np.array(map(float, mzs.split(",")))
+    intensities = np.array(map(float, intensities.split(",")))
+    order = intensities.argsort()[::-1]
+    mzs = mzs[order]
+    intensities = intensities[order]
+    tol = float(tol)
+
+    datacube = app.data.get_ion_image(np.array(mzs), tol)
+    images = datacube.xic
+
+    buf = io.BytesIO()
+    transform = np.sqrt
+    base_intensities = images[0]
+
+    plt.figure(figsize=(10, 10))
+    plt.xlabel("base peak intensities")
+    plt.ylabel("other peak intensities")
+    plt.title(formula + " + " + adduct + " (m/z={:.4f})".format(mzs[0]))
+
+    colors = ['blue', 'red', 'green', 'purple', 'black']
+    markersize = min(20, (10000.0 / (1 + np.sum(images[1] > 0))) ** 0.5)
+
+    for i in xrange(1, min(5, len(images))):
+        ratio = intensities[i] / intensities[0]
+        observed = images[i]
+
+        mask = base_intensities > 0
+        label = "m/z={0:.4f} {1:.1%}".format(mzs[i], intensities[i] / 100.0)
+        plt.plot(transform(base_intensities[mask]), transform(observed[mask]), '.', markersize=markersize,
+                 color = colors[i-1], label=label)
+
+        xs = transform(base_intensities[mask])
+        ys = transform(base_intensities[mask] * ratio)
+        order = xs.argsort()
+        plt.plot(xs[order], ys[order], color=colors[i-1], linewidth=0.5)
+    lgnd = plt.legend(loc='upper left', numpoints=10)
+    # http://stackoverflow.com/questions/24706125/setting-a-fixed-size-for-points-in-legend
+    for handle in lgnd.legendHandles:
+        handle._legmarker.set_markersize(6)
+    plt.savefig(buf)
+
     bottle.response.content_type = 'image/png'
     buf.seek(0, os.SEEK_END)
     bottle.response.content_length = buf.tell()
@@ -94,8 +145,7 @@ def show_images():
                 pc = np.percentile(img, 99)
                 img[img > pc] = pc
 
-        chaos = 1 - measure_of_chaos(datacube.xic_to_image(0), 30, interp=False)[0]
-        if chaos == 1: chaos = 0
+        chaos = measure_of_chaos(datacube.xic_to_image(0), 30, interp=False)[0]
 
         iso_corr = isotope_pattern_match(datacube.xic, intensities)
 

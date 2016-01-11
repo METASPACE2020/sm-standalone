@@ -30,4 +30,6 @@
     % end
   </tr>
   </table>
+  <img src="/correlation_plot/{{formula}}/{{adduct}}/{{",".join(map(str, mzs))}}/{{",".join(map(str, intensities))}}/{{tol}}"
+       width="600px"/>
 % end
