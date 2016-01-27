@@ -85,13 +85,29 @@ def generate_correlation_plot(formula, adduct, mzs, intensities, tol):
     transform = np.sqrt
     base_intensities = images[0]
 
-    plt.figure(figsize=(10, 10))
-    plt.xlabel("sqrt( base peak intensities )")
+    #plt.figure(figsize=(, 5))
+    plt.figure()
+    plt.subplot(1, 2, 1)
+    n = min(len(datacube.xic), len(intensities))
+    full_images = np.array([transform(datacube.xic_to_image(i)) for i in xrange(n)])
+    full_images /= np.linalg.norm(full_images, ord=2, axis=0)
+    normalized_ints = transform(intensities[:n])
+    normalized_ints /= np.linalg.norm(normalized_ints)
+    #correlations = np.einsum("ijk,i", full_images, normalized_ints)
+    #plt.imshow(correlations, vmin=0, vmax=1)
+    deviations = np.amax(np.abs(np.transpose(full_images, (1, 2, 0)) - normalized_ints), axis=2)
+    plt.imshow(deviations, vmin=0, vmax=0.5)
+    plt.colorbar()
+
+    markersize = min(20, (10000.0 / (1 + np.sum(images[1] > 0))) ** 0.5)
+
+    plt.subplot(1, 2, 2)
+
+    plt.xlabel("sqrt( principal peak intensities )")
     plt.ylabel("sqrt( other peak intensities )")
     plt.title(formula + " + " + adduct + " (m/z={:.4f})".format(mzs[0]))
 
     colors = ['blue', 'red', 'green', 'purple', 'black']
-    markersize = min(20, (10000.0 / (1 + np.sum(images[1] > 0))) ** 0.5)
 
     for i in xrange(1, min(5, len(images))):
         ratio = intensities[i] / intensities[0]

@@ -507,8 +507,8 @@ class CleanImageSearch(object):
         offset = 0
         images = []
         for m in formulas:
-            l = min(self.n, m.peak_count)
-            images.append(MolecularImage(raw_images[offset : offset + l, :],
+            #l = min(self.n, m.peak_count)
+            images.append(MolecularImage(raw_images[offset : offset + self.n, :],
                                          nrow, ncol,
                                          m.formula, m.adduct, self.patterns))
             offset += self.n

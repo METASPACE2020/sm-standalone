@@ -34,7 +34,7 @@ class Pipeline(object):
         self.monotone_pattern_score = {}
         self.intensity = {} # total image intensity
 
-        self.chunk_size = 200
+        self.chunk_size = max(1, 600 / len(config['isotope_generation']['adducts']))
 
         from colourmaps import viridis_colormap
         self.cmap = viridis_colormap()
