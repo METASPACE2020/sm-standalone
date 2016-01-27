@@ -11,10 +11,10 @@ import os
 import gc
 
 class Peak(t.IsDescription):
-    mz = t.Float64Col()
-    intensity = t.Float32Col()
     x = t.Int16Col()
     y = t.Int16Col()
+    mz = t.Float64Col()
+    intensity = t.Float32Col()
 
 def convert(imzml_filename, output_filename, complevel=5):
     filters = t.Filters(complib='blosc', complevel=complevel)
@@ -36,7 +36,7 @@ def convert(imzml_filename, output_filename, complevel=5):
 
     def write(peak, order):
         for j in xrange(len(order)):
-            peak['mz'] = convert.mzs_tmp[order[j]]
+            peak['mz'] = convert.mzs_tmp[j]
             peak['intensity'] = convert.ints_tmp[order[j]]
             peak['x'] = convert.xs_tmp[order[j]]
             peak['y'] = convert.ys_tmp[order[j]]
@@ -54,8 +54,8 @@ def convert(imzml_filename, output_filename, complevel=5):
                                     expectedrows=chunk_size)
         n = len(mzs)
         fill_arange(convert.order_tmp, n)
-        keysort(mzs, convert.order_tmp[:n])
         order = convert.order_tmp[:n]
+        keysort(mzs, order[:])
 
         write(table.row, order)
 
@@ -69,13 +69,12 @@ def convert(imzml_filename, output_filename, complevel=5):
     convert.k = 0
 
     def add_spectrum(spectrum, coords):
-        k = convert.k
         for j in xrange(len(spectrum[0])):
             mz, intensity = spectrum[0][j], spectrum[1][j]
-            convert.mzs_tmp[k] = mz
-            convert.ints_tmp[k] = intensity
-            convert.xs_tmp[k] = coords[0]
-            convert.ys_tmp[k] = coords[1]
+            convert.mzs_tmp[convert.k] = mz
+            convert.ints_tmp[convert.k] = intensity
+            convert.xs_tmp[convert.k] = coords[0]
+            convert.ys_tmp[convert.k] = coords[1]
             convert.k += 1
             if convert.k == chunk_size:
                 append_peaks(convert.mzs_tmp)
@@ -85,7 +84,6 @@ def convert(imzml_filename, output_filename, complevel=5):
         pbar = ProgressBar(maxval=len(imzml.coordinates)).start()
         i = 0
         for coords in imzml.coordinates:
-            #spectrum = map(np.array, imzml.getspectrum(i))
             spectrum = imzml.getspectrum(i)
             add_spectrum(spectrum, coords)
             i += 1
@@ -128,7 +126,7 @@ def convert(imzml_filename, output_filename, complevel=5):
     pbar.finish()
 
     table.flush()
-    table.cols.mz.create_index(filters=filters)
+    table.cols.mz.create_csindex(filters=filters)
     merged.close()
 
     for f in files:
@@ -143,7 +141,7 @@ def read_mz_image(imh5_filename, mz, ppm, hotspot_removal=True):
     lmz = mz * (1 - ppm * 1e-6)
     rmz = mz * (1 + ppm * 1e-6)
 
-    img = np.zeros((250, 280))
+    img = np.zeros(h5file.root.dimensions)
 
     # uses pyTables indexing for fast retrieval
     for x in peaks.where("(mz > lmz) & (mz < rmz)"):
