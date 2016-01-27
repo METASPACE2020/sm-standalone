@@ -13,15 +13,37 @@ import bottle
 # isotope pattern generation
 from pyMS.pyisocalc import pyisocalc
 
+from imzml_to_pytables import read_mz_image, read_ion_datacube
+
 class ImageWebserver(bottle.Bottle):
     def __init__(self, *args, **kwargs):
         super(ImageWebserver, self).__init__(*args, **kwargs)
 
     def run(self, filename, **kwargs):
         print "loading data..."
-        self.data = inMemoryIMS_low_mem(filename)
+        self.load_data(filename)
         print "running webserver..."
         super(ImageWebserver, self).run(**kwargs)
+
+    def load_data(self, filename):
+        if filename.endswith(".imzML") or filename.endswith(".hdf5"):
+            self.data = inMemoryIMS_low_mem(filename)
+            self.in_memory = True
+        elif filename.endswith(".imh5"):
+            self.filename = filename
+            self.in_memory = False
+
+    def get_ion_image(self, mz, tol):
+        if self.in_memory is True:
+            return self.data.get_ion_image(np.array([mz]), tol).xic_to_image(0)
+        else:
+            return read_mz_image(self.filename, mz, tol, hotspot_removal=False)
+
+    def get_datacube(self, mzs, tol):
+        if self.in_memory is True:
+            return self.data.get_ion_image(np.array(mzs), tol)
+        else:
+            return read_ion_datacube(self.filename, mzs, tol)
 
 app = ImageWebserver()
 
@@ -48,7 +70,7 @@ cmap = viridis_colormap()
 @app.route("/show_image/<mz>/<tol>")
 def generate_image(mz, tol):
     mz, tol = float(mz), float(tol)
-    img = app.data.get_ion_image(np.array([mz]), tol).xic_to_image(0)
+    img = app.get_ion_image(mz, tol)
     if img.shape[0] > img.shape[1]:
         img = img.T
     buf = io.BytesIO()
@@ -78,7 +100,7 @@ def generate_correlation_plot(formula, adduct, mzs, intensities, tol):
     intensities = intensities[order]
     tol = float(tol)
 
-    datacube = app.data.get_ion_image(np.array(mzs), tol)
+    datacube = app.get_datacube(np.array(mzs), tol)
     images = datacube.xic
 
     buf = io.BytesIO()
@@ -165,7 +187,7 @@ def _generate_page(formula, tolerance, hs_removal, resolution, pts, cutoff):
         pattern = pyisocalc.apply_gaussian(raw_pattern, fwhm, pts, exact=True)
 
         mzs, intensities = pattern.get_spectrum(source='centroids')
-        datacube = app.data.get_ion_image(np.array(mzs), tolerance)
+        datacube = app.get_datacube(np.array(mzs), tolerance)
         if hs_removal:
             for img in datacube.xic:
                 pc = np.percentile(img, 99)

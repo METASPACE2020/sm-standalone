@@ -153,6 +153,30 @@ def read_mz_image(imh5_filename, mz, ppm, hotspot_removal=True):
         img[img > perc] = perc
     return img
 
+from pyIMS.ion_datacube import ion_datacube
+def read_ion_datacube(imh5_filename, mzs, ppm):
+    cube = ion_datacube()
+    pixel_indices = []
+    cube.xic = []
+
+    h5file = t.open_file(imh5_filename, mode = "r")
+    peaks = h5file.root.peaks
+    cube.nRows, cube.nColumns = h5file.root.dimensions
+    # FIXME: store mask as a dataset in imh5
+    cube.pixel_indices = np.arange(cube.nRows * cube.nColumns)
+
+    img = np.zeros(h5file.root.dimensions)
+    for i, mz in enumerate(mzs):
+        lmz = mz * (1 - ppm * 1e-6)
+        rmz = mz * (1 + ppm * 1e-6)
+        img = np.zeros(h5file.root.dimensions)
+        for x in peaks.where("(mz > lmz) & (mz < rmz)"):
+            img[x['x'] - 1, x['y'] - 1] += x['intensity'] 
+        cube.xic.append(img.ravel())
+    h5file.close()
+    return cube
+
+
 if __name__ == '__main__':
     import sys
     convert(sys.argv[1], sys.argv[2])
