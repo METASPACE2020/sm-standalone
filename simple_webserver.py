@@ -21,50 +21,61 @@ class ImageWebserver(bottle.Bottle):
     def __init__(self, *args, **kwargs):
         super(ImageWebserver, self).__init__(*args, **kwargs)
 
-    def run(self, filename, **kwargs):
-        print "loading data..."
-        self.load_data(filename)
+    def run(self, filenames, **kwargs):
+        self.load_data(filenames)
         print "running webserver..."
         super(ImageWebserver, self).run(**kwargs)
 
-    def load_data(self, filename):
-        if filename.endswith(".imzML") or filename.endswith(".hdf5"):
-            self.data = inMemoryIMS_low_mem(filename)
-            self.in_memory = True
-        elif filename.endswith(".imh5"):
-            self.filename = filename
+    def load_data(self, filenames):
+        def prettify_fn(fn):
+            import os
+            return os.path.splitext(os.path.basename(fn))[0]
+
+        if len(filenames) == 0:
+            print "usage: python simple_webserver.py <file.imzML>"
+            print "       python simple_webserver.py <file.hdf5>"
+            print "       python simple_webserver.py <file1.imh5> [<file2.imh5> ...]"
+            sys.exit(0)
+        if len(filenames) > 1 and not all(fn.endswith(".imh5") for fn in filenames):
+            print "multiple-file mode is supported only for .imh5 files"
+            sys.exit(2)
+        if len(filenames) == 1:
+            filename = filenames[0]
+            if filename.endswith(".imzML") or filename.endswith(".hdf5"):
+                print "loading data..."
+                self.data = inMemoryIMS_low_mem(filename)
+                self.in_memory = True
+                self.paths = { prettify_fn(filename) : filename }
+            elif not filename.endswith(".imh5"):
+                print "unsupported format"
+                sys.exit(3)
+        else:
+            self.paths = { prettify_fn(fn) : fn for fn in filenames if os.path.exists(fn)}
+            print self.paths
+            for fn in filenames:
+                if not os.path.exists(fn):
+                    print "WARNING: file " + fn + " doesn't exist, skipping"
             self.in_memory = False
 
-    def get_ion_image(self, mz, tol):
+    def get_ion_image(self, dataset, mz, tol):
         if self.in_memory is True:
             return self.data.get_ion_image(np.array([mz]), tol).xic_to_image(0)
         else:
-            return read_mz_image(self.filename, mz, tol, hotspot_removal=False)
+            return read_mz_image(self.paths[dataset], mz, tol, hotspot_removal=False)
 
-    def get_datacube(self, mzs, tol):
+    def get_datacube(self, dataset, mzs, tol):
         if self.in_memory is True:
             return self.data.get_ion_image(np.array(mzs), tol)
         else:
-            return read_ion_datacube(self.filename, mzs, tol)
+            return read_ion_datacube(self.paths[dataset], mzs, tol)
 
 app = ImageWebserver()
 
 @app.route('/', method='GET')
 def show_form():
-    return bottle.template('show_images', hs_removal=True,
+    return bottle.template('show_images', hs_removal=True, selected_dataset=app.paths.iterkeys().next(),
                            isotope_patterns={}, formula="", selected_adduct='H', pretty_formula="", tol=5,
-                           resolution=100000)
-
-@app.route('/', method='POST')
-def show_images():
-    formula = bottle.request.forms.get('formula')
-    tolerance = float(bottle.request.forms.get('tolerance'))
-    hs_removal = bottle.request.forms.get('hs_removal')
-    resolution = float(bottle.request.forms.get('resolution'))
-    pts = int(bottle.request.forms.get('pts'))
-    cutoff = float(bottle.request.forms.get('pyisocalc_cutoff'))
-    adduct = bottle.request.forms.get('adduct')
-    return _generate_page(formula, adduct, tolerance, hs_removal, resolution, pts, cutoff)
+                           resolution=100000, datasets=app.paths.keys())
 
 import io
 import os
@@ -73,10 +84,10 @@ from matplotlib.colors import Normalize
 
 cmap = viridis_colormap()
 
-@app.route("/show_image/<mz>/<tol>")
-def generate_image(mz, tol):
+@app.route("/show_image/<dataset>/<mz>/<tol>")
+def generate_image(dataset, mz, tol):
     mz, tol = float(mz), float(tol)
-    img = app.get_ion_image(mz, tol)
+    img = app.get_ion_image(dataset, mz, tol)
     if img.shape[0] > img.shape[1]:
         img = img.T
     buf = io.BytesIO()
@@ -97,8 +108,8 @@ def generate_image(mz, tol):
     buf.seek(0)
     return buf
 
-@app.route("/correlation_plot/<formula>/<adduct>/<mzs>/<intensities>/<tol>")
-def generate_correlation_plot(formula, adduct, mzs, intensities, tol):
+@app.route("/correlation_plot/<dataset>/<formula>/<adduct>/<mzs>/<intensities>/<tol>")
+def generate_correlation_plot(dataset, formula, adduct, mzs, intensities, tol):
     mzs = np.array(map(float, mzs.split(",")))
     intensities = np.array(map(float, intensities.split(",")))
     order = intensities.argsort()[::-1]
@@ -106,7 +117,7 @@ def generate_correlation_plot(formula, adduct, mzs, intensities, tol):
     intensities = intensities[order]
     tol = float(tol)
 
-    datacube = app.get_datacube(np.array(mzs), tol)
+    datacube = app.get_datacube(dataset, np.array(mzs), tol)
     images = datacube.xic
 
     buf = io.BytesIO()
@@ -141,7 +152,8 @@ def generate_correlation_plot(formula, adduct, mzs, intensities, tol):
 
     plt.xlabel("sqrt( principal peak intensities )")
     plt.ylabel("sqrt( other peak intensities )")
-    plt.title(formula + " + " + adduct + " (m/z={:.4f})".format(mzs[0]))
+    plt.title(formula + " + " + adduct + " (m/z={:.4f})".format(mzs[0]) +\
+              "\n(lines are based on the predicted isotope pattern)")
 
     colors = ['blue', 'red', 'green', 'purple', 'black']
 
@@ -176,13 +188,18 @@ from pyIMS.image_measures.isotope_pattern_match import isotope_pattern_match
 from pyIMS.image_measures.isotope_image_correlation import isotope_image_correlation
 from pyIMS.image_measures.level_sets_measure import measure_of_chaos
 
-@app.route("/show/<formula>")
-def show_images_get(formula):
-    tolerance = float(bottle.request.params.get('ppm', 5.0))
+@app.route("/show")
+def show_images_get():
+    dataset = bottle.request.params.get('dataset', app.paths.iterkeys().next())
+    print dataset
+    formula = bottle.request.params.get('formula', '')
+    tolerance = float(bottle.request.params.get('tolerance', 5.0))
     resolution = float(bottle.request.params.get('resolution', 1e5))
-    return _generate_page(formula, adduct, tolerance, True, resolution, 10, 0.001)
+    selected_adduct = bottle.request.params.get('adduct', 'H')
+    hs_removal = bottle.request.params.get('hs_removal', True)
+    pts = float(bottle.request.params.get('pts', 10))
+    cutoff = float(bottle.request.params.get('pyisocalc_cutoff', 1e-3))
 
-def _generate_page(formula, selected_adduct, tolerance, hs_removal, resolution, pts, cutoff):
     adducts = ['H', 'K', 'Na']
     isotope_patterns = {}
     for adduct in adducts:
@@ -201,7 +218,7 @@ def _generate_page(formula, selected_adduct, tolerance, hs_removal, resolution, 
             mzs = mzs[order]
             intensities = intensities[order]
 
-        datacube = app.get_datacube(mzs, tolerance)
+        datacube = app.get_datacube(dataset, mzs, tolerance)
         if hs_removal:
             for img in datacube.xic:
                 pc = np.percentile(img, 99)
@@ -223,7 +240,8 @@ def _generate_page(formula, selected_adduct, tolerance, hs_removal, resolution, 
     return bottle.template('show_images', hs_removal=hs_removal,
                            isotope_patterns=isotope_patterns, formula=formula, selected_adduct=selected_adduct,
                            pretty_formula=re.sub(r"(\d+)", r"<sub>\1</sub>", formula),
-                           resolution=resolution, tol=tolerance)
+                           resolution=resolution, tol=tolerance, datasets=app.paths.keys(),
+                           selected_dataset=dataset)
 
 import sys
-app.run(sys.argv[1], port=8080)
+app.run(sys.argv[1:], port=8080)

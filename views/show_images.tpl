@@ -9,37 +9,51 @@
 
 </head>
 <body>
-<div class="page-header">
+<div class="page-header container">
 
-<form action="/" method="post" class="text-center" role="form" class="form-horizontal">
-<div class="container">
-  <div class=col-sm-2>
-  <h1>{{!pretty_formula}}</h1></td>
+<form action="/show" method="get" class="text-center" role="form" class="form-horizontal">
+<div class="col-sm-12">
+
+  <div class="form-group col-sm-2" style="font-size:30px">
+    {{!pretty_formula}}
   </div>
-  <div class="col-sm-10">
+
   <div class="form-group col-sm-10">
-    <div class="col-sm-1"></div>
-    <label class="col-sm-1">Formula:</label>
-    <div class="col-sm-3">
-      <input class="form-control" name="formula" type="text" value="{{formula}}">
-    </div>
-    <label class="col-sm-2">Tolerance (ppm):</label>
+    <label class="col-sm-1">Tolerance (ppm):</label>
     <div class="col-sm-3">
       <input name="tolerance" type="text" id="tolerance" class="form-control" value="" data-slider-min="1" data-slider-max="10" data-slider-step="1" data-slider-value="{{tol}}" data-slider-orientation="horizontal" data-slider-selection="after" data-slider-tooltip="show">
     </div>
+
+    <div class="col-sm-2">
+      <input class="form-control" name="formula" type="text" value="{{formula}}" placeholder="Sum formula">
+    </div>
+
+    <div class="col-sm-4">
+      <select class="form-control" name="dataset" required>
+      % for dataset in datasets:
+      <option value="{{dataset}}" {{"selected" if dataset == selected_dataset else ''}}>{{dataset}}</option>
+      % end
+      </select>
+    </div>
+  </div>
+
+  <div class="form-group col-sm-2">
   </div>
 
   <div class="form-group col-sm-10">
-    <label class="col-sm-1">Remove hotspots</label>
-    <div class="col-sm-1">
-      <input class="form-control col-sm-1" type="checkbox" {{'checked="true"' if hs_removal else ''}} name="hs_removal">
+    <label class="col-sm-1">Resolution:</label>
+    <div class="col-sm-3">
+      <input name="resolution" type="text" id="resolution" class="form-control" value="" data-slider-min="1000" data-slider-max="200000" data-slider-step="1000" data-slider-value="{{resolution}}" data-slider-orientation="horizontal" data-slider-selection="after" data-slider-tooltip="show">
     </div>
+
     <div class="col-sm-3">
       <input class="form-control btn-info" value="Show images" type="submit">
     </div>
-    <label class="col-sm-2">Resolution:</label>
-    <div class="col-sm-3">
-      <input name="resolution" type="text" id="resolution" class="form-control" value="" data-slider-min="1000" data-slider-max="200000" data-slider-step="1000" data-slider-value="{{resolution}}" data-slider-orientation="horizontal" data-slider-selection="after" data-slider-tooltip="show">
+    <div class="form-inline">
+      <label class="col-sm-3 checkbox">
+        <input class="form-control" type="checkbox" {{'checked="true"' if hs_removal else ''}} name="hs_removal">
+        Remove hotspots
+      </label>
     </div>
   </div>
 <!-- Pyisocalc cutoff: <input name="pyisocalc_cutoff" type="number" step="any" value="1e-5"><br/>-->
@@ -47,7 +61,9 @@
     <input type="hidden" name="pyisocalc_cutoff" value="1e-3">
     <input type="hidden" name="pts" value="10">
     <input type="hidden" id="selected_adduct" name="adduct" value="{{selected_adduct}}">
+
   </div>
+
 </div>
 </form>
 
@@ -101,15 +117,15 @@
     % for mz in mzs:
     <td style='border: 1px solid black'>
     % if hs_removal:
-      <img src="/show_image/{{mz}}/{{tol}}?remove_hotspots=true" width="200px">
+      <img src="/show_image/{{selected_dataset}}/{{mz}}/{{tol}}?remove_hotspots=true" width="200px">
     % else:
-      <img src="/show_image/{{mz}}/{{tol}}" width="200px">
+      <img src="/show_image/{{selected_dataset}}/{{mz}}/{{tol}}" width="200px">
     % end
     </td>
     % end
   </tr>
   </table>
-  <img src="/correlation_plot/{{formula}}/{{adduct}}/{{",".join(map(str, mzs))}}/{{",".join(map(str, intensities))}}/{{tol}}"
+  <img src="/correlation_plot/{{selected_dataset}}/{{formula}}/{{adduct}}/{{",".join(map(str, mzs))}}/{{",".join(map(str, intensities))}}/{{tol}}"
        class="img-responsive" width="1100px"/>
   </div> <!-- adduct div -->
 
