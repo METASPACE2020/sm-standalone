@@ -9,6 +9,8 @@ from colourmaps import viridis_colormap
 
 from pipelines import inMemoryIMS_low_mem
 
+from collections import OrderedDict
+
 # webserver
 import bottle
 
@@ -50,8 +52,10 @@ class ImageWebserver(bottle.Bottle):
                 print "unsupported format"
                 sys.exit(3)
         else:
-            self.paths = { prettify_fn(fn) : fn for fn in filenames if os.path.exists(fn)}
-            print self.paths
+            self.paths = OrderedDict()
+            for fn in filenames:
+                if os.path.exists(fn):
+                    self.paths[prettify_fn(fn)] = fn
             for fn in filenames:
                 if not os.path.exists(fn):
                     print "WARNING: file " + fn + " doesn't exist, skipping"
@@ -191,7 +195,6 @@ from pyIMS.image_measures.level_sets_measure import measure_of_chaos
 @app.route("/show")
 def show_images_get():
     dataset = bottle.request.params.get('dataset', app.paths.iterkeys().next())
-    print dataset
     formula = bottle.request.params.get('formula', '')
     tolerance = float(bottle.request.params.get('tolerance', 5.0))
     resolution = float(bottle.request.params.get('resolution', 1e5))
