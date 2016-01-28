@@ -2,6 +2,8 @@
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import re
 
 from colourmaps import viridis_colormap
 
@@ -47,18 +49,22 @@ class ImageWebserver(bottle.Bottle):
 
 app = ImageWebserver()
 
-@app.route('/')
+@app.route('/', method='GET')
 def show_form():
-    return '''
-        <form action="/show_images" method="post">
-            Formula: <input name="formula" type="text"><br/>
-            Tolerance (ppm): <input name="tolerance" type="number" step="any" value="1.0"><br/>
-            Pyisocalc cutoff: <input name="pyisocalc_cutoff" type="number" step="any" value="1e-5"><br/>
-            Resolution: <input name="resolution" type="number" step="any" value="200000"><br/>
-            Points per FWHM: <input name="pts" type="number" step="1" value="10"></br>
-            <input value="Show images" type="submit"><br/>
-            <input type="checkbox" checked="true" name="hs_removal">Remove hotspots
-        </form>'''
+    return bottle.template('show_images', hs_removal=True,
+                           isotope_patterns={}, formula="", selected_adduct='H', pretty_formula="", tol=5,
+                           resolution=100000)
+
+@app.route('/', method='POST')
+def show_images():
+    formula = bottle.request.forms.get('formula')
+    tolerance = float(bottle.request.forms.get('tolerance'))
+    hs_removal = bottle.request.forms.get('hs_removal')
+    resolution = float(bottle.request.forms.get('resolution'))
+    pts = int(bottle.request.forms.get('pts'))
+    cutoff = float(bottle.request.forms.get('pyisocalc_cutoff'))
+    adduct = bottle.request.forms.get('adduct')
+    return _generate_page(formula, adduct, tolerance, hs_removal, resolution, pts, cutoff)
 
 import io
 import os
@@ -107,9 +113,9 @@ def generate_correlation_plot(formula, adduct, mzs, intensities, tol):
     transform = np.sqrt
     base_intensities = images[0]
 
-    #plt.figure(figsize=(, 5))
-    plt.figure()
-    plt.subplot(1, 2, 1)
+    plt.figure(figsize=(16, 8))
+    ax1 = plt.subplot(1, 2, 1)
+    plt.title("per-pixel isotope pattern agreement (higher is better)")
     n = min(len(datacube.xic), len(intensities))
     full_images = np.array([transform(datacube.xic_to_image(i)) for i in xrange(n)])
     full_images /= np.linalg.norm(full_images, ord=2, axis=0)
@@ -117,9 +123,17 @@ def generate_correlation_plot(formula, adduct, mzs, intensities, tol):
     normalized_ints /= np.linalg.norm(normalized_ints)
     #correlations = np.einsum("ijk,i", full_images, normalized_ints)
     #plt.imshow(correlations, vmin=0, vmax=1)
-    deviations = np.amax(np.abs(np.transpose(full_images, (1, 2, 0)) - normalized_ints), axis=2)
-    plt.imshow(deviations, vmin=0, vmax=0.5)
-    plt.colorbar()
+    deviations = 1 - np.amax(np.abs(np.transpose(full_images, (1, 2, 0)) - normalized_ints), axis=2)
+    if deviations.shape[0] > deviations.shape[1]:
+        deviations = deviations.T
+    plt.imshow(deviations, vmin=0, vmax=1, cmap="gnuplot")
+    plt.axis('off')
+
+    # http://stackoverflow.com/questions/26034777/matplotlib-same-height-for-colorbar-as-for-plot
+    divider = make_axes_locatable(ax1)
+    cax1 = divider.append_axes("right", size="5%", pad="3%")
+
+    cbar = plt.colorbar(cax = cax1)
 
     markersize = min(20, (10000.0 / (1 + np.sum(images[1] > 0))) ** 0.5)
 
@@ -148,6 +162,7 @@ def generate_correlation_plot(formula, adduct, mzs, intensities, tol):
     # http://stackoverflow.com/questions/24706125/setting-a-fixed-size-for-points-in-legend
     for handle in lgnd.legendHandles:
         handle._legmarker.set_markersize(6)
+    plt.tight_layout(w_pad=5.0)
     plt.savefig(buf)
     plt.close()
 
@@ -165,19 +180,9 @@ from pyIMS.image_measures.level_sets_measure import measure_of_chaos
 def show_images_get(formula):
     tolerance = float(bottle.request.params.get('ppm', 5.0))
     resolution = float(bottle.request.params.get('resolution', 1e5))
-    return _generate_page(formula, tolerance, True, resolution, 10, 0.001)
+    return _generate_page(formula, adduct, tolerance, True, resolution, 10, 0.001)
 
-@app.route("/show_images", method="post")
-def show_images():
-    formula = bottle.request.forms.get('formula')
-    tolerance = float(bottle.request.forms.get('tolerance'))
-    hs_removal = bottle.request.forms.get('hs_removal')
-    resolution = float(bottle.request.forms.get('resolution'))
-    pts = int(bottle.request.forms.get('pts'))
-    cutoff = float(bottle.request.forms.get('pyisocalc_cutoff'))
-    return _generate_page(formula, tolerance, hs_removal, resolution, pts, cutoff)
-
-def _generate_page(formula, tolerance, hs_removal, resolution, pts, cutoff):
+def _generate_page(formula, selected_adduct, tolerance, hs_removal, resolution, pts, cutoff):
     adducts = ['H', 'K', 'Na']
     isotope_patterns = {}
     for adduct in adducts:
@@ -186,8 +191,17 @@ def _generate_page(formula, tolerance, hs_removal, resolution, pts, cutoff):
         fwhm = raw_pattern.get_spectrum()[0][0] / resolution
         pattern = pyisocalc.apply_gaussian(raw_pattern, fwhm, pts, exact=True)
 
-        mzs, intensities = pattern.get_spectrum(source='centroids')
-        datacube = app.get_datacube(np.array(mzs), tolerance)
+        mzs, intensities = map(np.array, pattern.get_spectrum(source='centroids'))
+        k = 5
+        if len(mzs) > k:
+            order = intensities.argsort()[::-1]
+            mzs = mzs[order][:k]
+            intensities = intensities[order][:k]
+            order = mzs.argsort()
+            mzs = mzs[order]
+            intensities = intensities[order]
+
+        datacube = app.get_datacube(mzs, tolerance)
         if hs_removal:
             for img in datacube.xic:
                 pc = np.percentile(img, 99)
@@ -207,7 +221,9 @@ def _generate_page(formula, tolerance, hs_removal, resolution, pts, cutoff):
         
         isotope_patterns[adduct] = (mzs, intensities, stats)
     return bottle.template('show_images', hs_removal=hs_removal,
-                           isotope_patterns=isotope_patterns, formula=formula, tol=tolerance)
+                           isotope_patterns=isotope_patterns, formula=formula, selected_adduct=selected_adduct,
+                           pretty_formula=re.sub(r"(\d+)", r"<sub>\1</sub>", formula),
+                           resolution=resolution, tol=tolerance)
 
 import sys
 app.run(sys.argv[1], port=8080)
