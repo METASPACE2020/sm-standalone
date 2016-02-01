@@ -76,13 +76,13 @@ ImzmlReader::ImzmlReader(const std::string& filename) : filename_{filename}, hav
   readMetadata();
 }
 
-bool ImzmlReader::readNextSpectrum(Spectrum& spectrum) {
+bool ImzmlReader::readNextSpectrum(ims::Spectrum& spectrum) {
   if (!have_next_)
     return false;
 
   have_next_ = false;
 
-  spectrum.x = spectrum.y = spectrum.z = 0;
+  spectrum.coords = ims::Position{0, 0, 0};
   spectrum.mzs.clear();
   spectrum.intensities.clear();
 
@@ -94,9 +94,9 @@ bool ImzmlReader::readNextSpectrum(Spectrum& spectrum) {
 
     if (name == "cvParam") {
       auto accession = getAttribute("accession");
-      if      (accession == "IMS:1000050") readIntValue(spectrum.x);
-      else if (accession == "IMS:1000051") readIntValue(spectrum.y);
-      else if (accession == "IMS:1000052") readIntValue(spectrum.z);
+      if      (accession == "IMS:1000050") readIntValue(spectrum.coords.x);
+      else if (accession == "IMS:1000051") readIntValue(spectrum.coords.y);
+      else if (accession == "IMS:1000052") readIntValue(spectrum.coords.z);
       else if (accession == "IMS:1000102") readIntValue(array->file_offset);
       else if (accession == "IMS:1000103") readIntValue(array->length);
       else if (accession == "IMS:1000104") readIntValue(array->encoded_length);

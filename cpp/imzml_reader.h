@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ims.h"
+
 #include <libxml2/libxml/xmlreader.h>
 #include <cstdint>
 #include <map>
@@ -8,6 +10,7 @@
 #include <fstream>
 
 namespace imzml{
+
 class Metadata {
   static const std::map<std::string, std::string> supported_accessions_;
 
@@ -21,7 +24,6 @@ public:
     return dict_;
   }
 };
-
 
 struct LibXmlString {
   xmlChar* str;
@@ -55,15 +57,6 @@ struct LibXmlString {
 };
 
 LibXmlString getAttribute(xmlTextReaderPtr, const char*);
-
-struct Spectrum {
-  std::vector<double> mzs;
-  std::vector<float> intensities;
-
-  uint32_t x;
-  uint32_t y;
-  uint32_t z;
-};
 
 class ImzmlReader {
   Metadata metadata_;
@@ -126,7 +119,7 @@ class ImzmlReader {
 public:
   ImzmlReader(const std::string& filename);
 
-  bool readNextSpectrum(Spectrum& spectrum);
+  bool readNextSpectrum(ims::Spectrum& spectrum);
 
   const std::map<std::string, std::string>& dict() const;
 
