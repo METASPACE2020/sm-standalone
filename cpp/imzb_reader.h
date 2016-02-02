@@ -100,9 +100,17 @@ public:
 		size_t start_block = index_->startBlock(min_mz);
 		size_t end_block = index_->endBlock(max_mz);
 		std::ifstream in{fn_};
+
 		for (size_t i = start_block; i < end_block; ++i) {
 			size_t n = decompressBlock(i, in, inbuf, outbuf);
-			result.insert(result.end(), outbuf.begin(), outbuf.begin() + n);
+      auto beg = outbuf.cbegin(), end = outbuf.cbegin() + n;
+      if (outbuf.front().mz < min_mz)
+        beg = std::lower_bound(beg, end, min_mz,
+          [](const ims::Peak& p, double mz) { return p.mz < mz; });
+      if (outbuf.back().mz > max_mz)
+        end = std::upper_bound(beg, end, max_mz,
+          [](double mz, const ims::Peak& p) { return mz < p.mz; });
+			result.insert(result.end(), beg, end);
 		}
 		return result;
 	}

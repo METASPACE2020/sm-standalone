@@ -27,6 +27,8 @@ private:
   uint64_t bytes_written_;
 
   void dump() {
+    if (filled_ == 0)
+      return;
     int n = blosc_compress_ctx(5, 1, sizeof(ims::Peak),
                                filled_ * sizeof(ims::Peak), &in_buf_[0],
                                &out_buf_[0], out_buf_.size(),
