@@ -123,6 +123,9 @@ public:
 
   const std::map<std::string, std::string>& dict() const;
 
+  uint32_t height() const;
+  uint32_t width() const;
+
   ~ImzmlReader();
 };
 

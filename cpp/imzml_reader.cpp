@@ -127,4 +127,12 @@ const std::map<std::string, std::string>& ImzmlReader::dict() const {
   return metadata_.dict();
 }
 
+uint32_t ImzmlReader::height() const {
+  return 1 + atoi(dict().find("max count of pixels x")->second.c_str());
+}
+
+uint32_t ImzmlReader::width() const {
+  return 1 + atoi(dict().find("max count of pixels y")->second.c_str());
+}
+
 }

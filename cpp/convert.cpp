@@ -47,6 +47,8 @@ class Sorter {
 
     std::vector<std::shared_ptr<imzb::ImzbReader>> readers;
     imzb::ImzbWriter writer(fn_);
+    writer.setMask(mask_);
+
     ims::Peak peak;
     for (const auto& tmp_fn: tmp_filenames_) {
       readers.push_back(std::make_shared<imzb::ImzbReader>(tmp_fn));
@@ -72,10 +74,15 @@ class Sorter {
     }
   }
 
+  imzb::Mask mask_;
 public:
   Sorter(const std::string& filename, size_t buffer_size=10000000) :
     fn_(filename),buffer_(buffer_size), filled_(0), closed_(false)
   {
+  }
+
+  void setMask(const imzb::Mask& mask) {
+    mask_ = mask;
   }
 
   void addPeak(const ims::Peak& peak) {
@@ -104,11 +111,15 @@ int main(int argc, char** argv) {
 
   imzml::ImzmlReader imzml(argv[1]);
   Sorter sorter(argv[2]);
-
+  imzb::Mask mask{imzml.height(), imzml.width()};
+  
   std::vector<std::string> tmp_filenames_;
   ims::Spectrum sp;
-  while (imzml.readNextSpectrum(sp))
+  while (imzml.readNextSpectrum(sp)) {
     for (size_t i = 0; i < sp.mzs.size(); ++i)
       sorter.addPeak(ims::Peak{sp.coords, sp.mzs[i], sp.intensities[i]});
+    mask.set(sp.coords.x, sp.coords.y);
+  }
+  sorter.setMask(mask);
   sorter.close();
 }
