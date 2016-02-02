@@ -18,7 +18,8 @@ struct Index {
   std::vector<uint64_t> offsets;
 
   size_t startBlock(double mz) const {
-    return std::lower_bound(mzs.begin(), mzs.end(), mz) - mzs.begin();
+    size_t idx = std::lower_bound(mzs.begin(), mzs.end(), mz) - mzs.begin();
+    return idx > 0 ? (idx - 1) : idx;
   }
 
   uint64_t startOffset(double mz) const {

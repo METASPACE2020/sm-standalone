@@ -17,7 +17,42 @@ import bottle
 # isotope pattern generation
 from pyMS.pyisocalc import pyisocalc
 
-from imzml_to_pytables import read_mz_image, read_ion_datacube
+from pyIMS.ion_datacube import ion_datacube
+
+import cffi
+ffi = cffi.FFI()
+ffi.cdef(open("cpp/imzb_cffi.h").read())
+imzb = ffi.dlopen("./cpp/libimzb.so")
+
+class ImzbReader(object):
+    def __init__(self, filename):
+        self._reader = ffi.gc(imzb.imzb_reader_new(filename),
+                              imzb.imzb_reader_free)
+    def height(self):
+        return imzb.imzb_reader_height(self._reader)
+
+    def width(self):
+        return imzb.imzb_reader_width(self._reader)
+
+    def get_mz_image(self, mz, ppm):
+        data = np.zeros(self.height() * self.width(), dtype=np.float32)
+        imzb.imzb_reader_image(self._reader, ffi.cast("double", mz), ffi.cast("double", ppm),
+                               ffi.from_buffer(data))
+        return data.reshape((self.height(), self.width()))
+
+    def get_datacube(self, mzs, ppm):
+        cube = ion_datacube()
+        cube.xic = []
+        cube.nRows = self.height()
+        cube.nColumns = self.width()
+        cube.pixel_indices = None
+
+        for mz in mzs:
+            img = self.get_mz_image(mz, ppm)
+            if cube.pixel_indices is None:
+                cube.pixel_indices = np.where(img.ravel() >= 0)[0]
+            cube.xic.append(img.ravel()[cube.pixel_indices])
+        return cube
 
 class ImageWebserver(bottle.Bottle):
     def __init__(self, *args, **kwargs):
@@ -36,28 +71,27 @@ class ImageWebserver(bottle.Bottle):
         if len(filenames) == 0:
             print "usage: python simple_webserver.py <file.imzML>"
             print "       python simple_webserver.py <file.hdf5>"
-            print "       python simple_webserver.py <file1.imh5> [<file2.imh5> ...]"
+            print "       python simple_webserver.py <file1.imzb> [<file2.imzb> ...]"
             sys.exit(0)
-        if len(filenames) > 1 and not all(fn.endswith(".imh5") for fn in filenames):
-            print "multiple-file mode is supported only for .imh5 files"
+        if len(filenames) > 1 and not all(fn.endswith(".imzb") for fn in filenames):
+            print "multiple-file mode is supported only for .imzb files"
             sys.exit(2)
-        if len(filenames) == 1:
+        if len(filenames) == 1 and not filenames[0].endswith(".imzb"):
             filename = filenames[0]
             if filename.endswith(".imzML") or filename.endswith(".hdf5"):
                 print "loading data..."
                 self.data = inMemoryIMS_low_mem(filename)
                 self.in_memory = True
                 self.paths = { prettify_fn(filename) : filename }
-            elif not filename.endswith(".imh5"):
+            else:
                 print "unsupported format"
                 sys.exit(3)
         else:
             self.paths = OrderedDict()
             for fn in filenames:
                 if os.path.exists(fn):
-                    self.paths[prettify_fn(fn)] = fn
-            for fn in filenames:
-                if not os.path.exists(fn):
+                    self.paths[prettify_fn(fn)] = ImzbReader(fn)
+                else:
                     print "WARNING: file " + fn + " doesn't exist, skipping"
             self.in_memory = False
 
@@ -65,13 +99,13 @@ class ImageWebserver(bottle.Bottle):
         if self.in_memory is True:
             return self.data.get_ion_image(np.array([mz]), tol).xic_to_image(0)
         else:
-            return read_mz_image(self.paths[dataset], mz, tol, hotspot_removal=False)
+            return self.paths[dataset].get_mz_image(mz, tol)
 
     def get_datacube(self, dataset, mzs, tol):
         if self.in_memory is True:
             return self.data.get_ion_image(np.array(mzs), tol)
         else:
-            return read_ion_datacube(self.paths[dataset], mzs, tol)
+            return self.paths[dataset].get_datacube(mzs, tol)
 
 app = ImageWebserver()
 
@@ -141,7 +175,7 @@ def generate_correlation_plot(dataset, formula, adduct, mzs, intensities, tol):
     deviations = 1 - np.amax(np.abs(np.transpose(full_images, (1, 2, 0)) - normalized_ints), axis=2)
     if deviations.shape[0] > deviations.shape[1]:
         deviations = deviations.T
-    plt.imshow(deviations, vmin=0, vmax=1, cmap="gnuplot")
+    plt.imshow(deviations, vmin=0, vmax=1, cmap="gnuplot", interpolation='none')
     plt.axis('off')
 
     # http://stackoverflow.com/questions/26034777/matplotlib-same-height-for-colorbar-as-for-plot

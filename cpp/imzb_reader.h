@@ -7,11 +7,14 @@
 
 #include <string>
 #include <fstream>
+#include <ios>
 #include <vector>
 #include <cstdint>
 #include <cassert>
 #include <memory>
 #include <algorithm>
+
+#include <iostream>
 
 namespace imzb {
 
@@ -61,7 +64,7 @@ public:
     in_(filename), block_idx_(0), peaks_(imzb::ImzbWriter::BLOCK_SIZE),
     n_peaks_(0), pos_(0), empty_(false)
   {
-    std::ifstream in_idx(filename + ".idx");
+    std::ifstream in_idx(filename + ".idx", std::ios::binary);
 
     index_ = std::make_shared<Index>();
     index_->read(in_idx);
@@ -99,7 +102,7 @@ public:
     std::vector<ims::Peak> result, outbuf{imzb::ImzbWriter::BLOCK_SIZE};
     size_t start_block = index_->startBlock(min_mz);
     size_t end_block = index_->endBlock(max_mz);
-    std::ifstream in{fn_};
+    std::ifstream in{fn_, std::ios::binary};
 
     for (size_t i = start_block; i < end_block; ++i) {
       size_t n = decompressBlock(i, in, inbuf, outbuf);
@@ -113,6 +116,27 @@ public:
       result.insert(result.end(), beg, end);
     }
     return result;
+  }
+
+  std::vector<float> image(double mz, double ppm) const {
+    assert(ppm > 0);
+
+    std::vector<float> image(height() * width());
+    readImage(mz, ppm, &image[0]);
+    return image;
+  }
+
+  void readImage(double mz, double ppm, float* image) const {
+    for (size_t i = 0; i < height(); ++i)
+      for (size_t j = 0; j < width(); ++j)
+        if (!index_->header.mask.hasSpectrumAt(i, j))
+          image[i * width() + j] = -1.0;
+        else
+          image[i * width() + j] = 0.0;
+
+    auto peaks = slice(mz - mz * ppm * 1e-6, mz + mz * ppm * 1e-6);
+    for (auto& peak: peaks)
+      image[peak.coords.x * width() + peak.coords.y] += peak.intensity;
   }
 
   uint32_t height() const { return index_->header.mask.height; }

@@ -8,6 +8,7 @@
 
 #include <string>
 #include <fstream>
+#include <ios>
 #include <vector>
 #include <cassert>
 
@@ -45,7 +46,7 @@ private:
 
 public:
   ImzbWriter(const std::string& filename) :
-    out_(filename),
+    out_{filename, std::ios::binary},
     in_buf_(BLOCK_SIZE),
     out_buf_(BLOCK_SIZE * sizeof(ims::Peak) + BLOSC_MAX_OVERHEAD * 2),
     filled_(0), bytes_written_(0), filename_(filename)
@@ -66,7 +67,7 @@ public:
     dump();
     out_.close();
 
-    std::ofstream out_idx(filename_ + ".idx");
+    std::ofstream out_idx(filename_ + ".idx", std::ios::binary);
     index_.write(out_idx);
     out_idx.close();
   }

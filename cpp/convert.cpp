@@ -116,8 +116,11 @@ int main(int argc, char** argv) {
   std::vector<std::string> tmp_filenames_;
   ims::Spectrum sp;
   while (imzml.readNextSpectrum(sp)) {
-    for (size_t i = 0; i < sp.mzs.size(); ++i)
-      sorter.addPeak(ims::Peak{sp.coords, sp.mzs[i], sp.intensities[i]});
+    for (size_t i = 0; i < sp.mzs.size(); ++i) {
+      // skip invalid (NaN) and zero peaks
+      if (sp.mzs[i] > 0 && sp.intensities[i] > 0)
+        sorter.addPeak(ims::Peak{sp.coords, sp.mzs[i], sp.intensities[i]});
+    }
     mask.set(sp.coords.x, sp.coords.y);
   }
   sorter.setMask(mask);
