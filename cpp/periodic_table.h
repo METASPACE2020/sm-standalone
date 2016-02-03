@@ -6,8 +6,10 @@
 
 namespace ms {
   struct IsotopePattern {
-    std::vector<double> mzs;
-    std::vector<float> intensities;
+    std::vector<double> masses;
+    std::vector<float> abundances;
+
+    size_t size() const { return masses.size(); }
   };
 
   struct Element;
