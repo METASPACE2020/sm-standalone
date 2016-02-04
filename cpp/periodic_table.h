@@ -4,13 +4,9 @@
 #include <vector>
 #include <string>
 
-namespace ms {
-  struct IsotopePattern {
-    std::vector<double> masses;
-    std::vector<float> abundances;
+#include "isotope_pattern.h"
 
-    size_t size() const { return masses.size(); }
-  };
+namespace ms {
 
   struct Element;
   extern const std::map<std::string, ms::Element> periodic_table;
