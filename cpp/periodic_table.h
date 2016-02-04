@@ -8,6 +8,8 @@
 
 namespace ms {
 
+  constexpr double electronMass = 0.00054857990924;
+
   struct Element;
   extern const std::map<std::string, ms::Element> periodic_table;
 

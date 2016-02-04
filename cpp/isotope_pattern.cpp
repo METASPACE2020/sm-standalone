@@ -1,9 +1,15 @@
 #include "isotope_pattern.h"
+#include "periodic_table.h"
 
 #include <vector>
 #include <algorithm>
 
 namespace ms {
+
+void IsotopePattern::addCharge(int charge) {
+  for (auto& m: masses)
+    m -= charge * ms::electronMass;
+}
 
 IsotopePattern IsotopePattern::multiply(const IsotopePattern& other, double threshold) const {
   if (this->isUnit()) return other;

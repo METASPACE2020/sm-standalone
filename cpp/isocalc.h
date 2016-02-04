@@ -8,7 +8,6 @@
 #include <cstdint>
 
 namespace ms {
-  constexpr double electronMass = 0.00054857990924;
   typedef std::map<std::string, uint16_t> ElementCounter;
 
   IsotopePattern computeIsotopePattern(const Element& element, size_t amount, double fft_threshold = 0.0);

@@ -15,6 +15,9 @@ namespace ms {
                    std::initializer_list<double> abundances) : masses{masses}, abundances{abundances}
     {}
 
+    // shifts masses accordingly to the number of added/subtracted electrons
+    void addCharge(int charge);
+
     bool isUnit() const { return masses.size() == 1 && masses[0] == 0.0; }
 
     ms::IsotopePattern multiply(const IsotopePattern& other, double threshold = 0.0) const;
