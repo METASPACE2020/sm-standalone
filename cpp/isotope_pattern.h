@@ -23,7 +23,7 @@ namespace ms {
     ms::IsotopePattern multiply(const IsotopePattern& other, double threshold = 0.0) const;
 
     ms::IsotopePattern centroids(double resolution,
-                                 double min_abundance = 1e-5,
+                                 double min_abundance = 1e-4,
                                  size_t points_per_fwhm = 25) const;
 
     // sorts by decreasing intensity and scales max intensity to 1
