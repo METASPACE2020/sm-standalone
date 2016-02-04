@@ -13,10 +13,10 @@ namespace ms {
   IsotopePattern computeIsotopePattern(const Element& element, size_t amount, double fft_threshold = 0.0);
 
   IsotopePattern computeIsotopePattern(const ElementCounter& element_counts,
-      double threshold = 1e-3, double fft_threshold = 1e-10);
+      double threshold = 1e-5, double fft_threshold = 1e-10);
 
   IsotopePattern computeIsotopePattern(const std::string& sum_formula,
-      double threshold = 1e-3, double fft_threshold = 1e-10);
+      double threshold = 1e-5, double fft_threshold = 1e-10);
 }
 
 namespace sf_parser {
