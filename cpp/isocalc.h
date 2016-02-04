@@ -10,6 +10,9 @@
 namespace ms {
   typedef std::map<std::string, uint16_t> ElementCounter;
 
+  double monoisotopicMass(const ElementCounter& counter);
+  double monoisotopicMass(const std::string& formula);
+
   IsotopePattern computeIsotopePattern(const Element& element, size_t amount, double fft_threshold = 0.0);
 
   IsotopePattern computeIsotopePattern(const ElementCounter& element_counts,

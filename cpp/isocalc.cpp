@@ -5,6 +5,7 @@
 #include <cstring>
 #include <complex>
 #include <vector>
+#include <mutex>
 
 namespace ms {
   namespace detail {
@@ -33,10 +34,23 @@ namespace ms {
     };
   }
 
+  double monoisotopicMass(const ElementCounter& counter) {
+    double sum = 0.0;
+    for (auto& item: counter)
+      sum += item.second * ms::Element::getByName(item.first).isotope_pattern.masses[0];
+    return sum;
+  }
+
+  double monoisotopicMass(const std::string& formula) {
+    return monoisotopicMass(::sf_parser::parseSumFormula(formula));
+  }
+
   IsotopePattern computeIsotopePattern(const ms::Element& element, size_t amount, double threshold) {
     size_t dim = element.isotope_pattern.size() - 1;
     std::vector<int> dimensions(static_cast<int>(dim), amount + 1);
     detail::FftwArray arr{dimensions};
+
+    static std::mutex plan_mutex; // planning is not thread-safe
 
     // array setup
     const auto& iso = element.isotope_pattern;
@@ -44,9 +58,11 @@ namespace ms {
     for (size_t i = 0, k = 1; i < dim; i++, k *= amount + 1)
       arr.data()[k] = iso.abundances[dim - i];
 
+    plan_mutex.lock();
     // forward FFT
     auto fwd_plan = fftw_plan_dft(int(dim), &dimensions[0], arr.fftw_data(), arr.fftw_data(),
                                  FFTW_FORWARD, FFTW_ESTIMATE);
+    plan_mutex.unlock();
     fftw_execute(fwd_plan);
 
     // exponentiation
@@ -55,8 +71,10 @@ namespace ms {
     fftw_destroy_plan(fwd_plan);
 
     // inverse FFT
+    plan_mutex.lock();
     auto bwd_plan = fftw_plan_dft(dim, &dimensions[0], arr.fftw_data(), arr.fftw_data(),
                                   FFTW_BACKWARD, FFTW_ESTIMATE);
+    plan_mutex.unlock();
     fftw_execute(bwd_plan);
     for (size_t i = 0; i < arr.size(); ++i)
       arr.data()[i] /= double(arr.size()); // take care of FFTW normalization
@@ -96,7 +114,7 @@ namespace ms {
   {
     assert(threshold < 1);
     ms::IsotopePattern result(0);
-    
+
     for (auto& item: element_counts) {
       assert(ms::Element::isKnown(item.first));
       auto element = ms::Element::getByName(item.first);

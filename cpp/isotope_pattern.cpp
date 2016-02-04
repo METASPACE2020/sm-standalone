@@ -82,7 +82,10 @@ IsotopePattern sortByMass(const ms::IsotopePattern& p) {
 }
 
 IsotopePattern IsotopePattern::centroids(double resolution, double min_abundance, size_t points_per_fwhm) const {
+  if (this->isUnit() || this->masses.size() == 0)
+    return *this;
   auto p = sortByMass(*this);
+  assert(this->masses[0] > 0);
   double fwhm = p.masses[0] / resolution;
   double step = fwhm / points_per_fwhm;
   double sigma = fwhm / fwhm_to_sigma;
