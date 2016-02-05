@@ -62,7 +62,6 @@ namespace ms {
     // forward FFT
     auto fwd_plan = fftw_plan_dft(int(dim), &dimensions[0], arr.fftw_data(), arr.fftw_data(),
                                  FFTW_FORWARD, FFTW_ESTIMATE);
-    plan_mutex.unlock();
     fftw_execute(fwd_plan);
 
     // exponentiation
@@ -71,14 +70,13 @@ namespace ms {
     fftw_destroy_plan(fwd_plan);
 
     // inverse FFT
-    plan_mutex.lock();
     auto bwd_plan = fftw_plan_dft(dim, &dimensions[0], arr.fftw_data(), arr.fftw_data(),
                                   FFTW_BACKWARD, FFTW_ESTIMATE);
-    plan_mutex.unlock();
     fftw_execute(bwd_plan);
     for (size_t i = 0; i < arr.size(); ++i)
       arr.data()[i] /= double(arr.size()); // take care of FFTW normalization
     fftw_destroy_plan(bwd_plan);
+    plan_mutex.unlock();
 
     ms::IsotopePattern isotope_pattern;
 
