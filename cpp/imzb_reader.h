@@ -121,7 +121,7 @@ public:
   ims::Image<float> image(double mz, double ppm) const {
     assert(ppm > 0);
 
-    ims::Image<float> img(height(), width()); 
+    ims::Image<float> img(height(), width());
     readImage(mz, ppm, img.rawPtr());
     return img;
   }
