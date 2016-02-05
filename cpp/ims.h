@@ -1,5 +1,8 @@
 #pragma once
 
+#include "ims_image.h"
+#include "ims_measures.h"
+
 #include <vector>
 #include <cstdint>
 

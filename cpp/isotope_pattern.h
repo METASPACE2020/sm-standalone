@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstdlib>
 #include <initializer_list>
+#include <cassert>
 
 namespace ms {
   struct IsotopePattern {
@@ -15,8 +16,30 @@ namespace ms {
                    std::initializer_list<double> abundances) : masses{masses}, abundances{abundances}
     {}
 
+    IsotopePattern(std::vector<double> masses,
+                   std::vector<double> abundances) : masses{masses}, abundances{abundances}
+    {}
+
     // shifts masses accordingly to the number of added/subtracted electrons
     void addCharge(int charge);
+
+    IsotopePattern& charged(int charge) {
+      addCharge(charge);
+      return *this;
+    }
+
+    IsotopePattern& trimmed(size_t new_size) {
+      if (new_size < size()) {
+        masses.resize(new_size);
+        abundances.resize(new_size);
+      }
+      return *this;
+    }
+
+    IsotopePattern copy() const {
+      IsotopePattern p{masses, abundances};
+      return p;
+    }
 
     bool isUnit() const { return masses.size() == 1 && masses[0] == 0.0; }
 

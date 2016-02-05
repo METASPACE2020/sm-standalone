@@ -118,25 +118,27 @@ public:
     return result;
   }
 
-  std::vector<float> image(double mz, double ppm) const {
+  ims::Image<float> image(double mz, double ppm) const {
     assert(ppm > 0);
 
-    std::vector<float> image(height() * width());
-    readImage(mz, ppm, &image[0]);
-    return image;
+    ims::Image<float> img(height(), width()); 
+    readImage(mz, ppm, img.rawPtr());
+    return img;
   }
 
   void readImage(double mz, double ppm, float* image) const {
+    auto idx = [&](size_t x, size_t y) { return ims::pixelIndex(x, y, width()); };
+
     for (size_t i = 0; i < height(); ++i)
       for (size_t j = 0; j < width(); ++j)
         if (!index_->header.mask.hasSpectrumAt(i, j))
-          image[i * width() + j] = -1.0;
+          image[idx(i, j)] = -1.0;
         else
-          image[i * width() + j] = 0.0;
+          image[idx(i, j)] = 0.0;
 
     auto peaks = slice(mz - mz * ppm * 1e-6, mz + mz * ppm * 1e-6);
     for (auto& peak: peaks)
-      image[peak.coords.x * width() + peak.coords.y] += peak.intensity;
+      image[idx(peak.coords.x, peak.coords.y)] += peak.intensity;
   }
 
   uint32_t height() const { return index_->header.mask.height; }
