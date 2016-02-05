@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ims.h"
+#include "ims_image.h"
 #include "blosc.h"
 #include "imzb_index.h"
 #include "imzb_writer.h"
@@ -13,8 +13,6 @@
 #include <cassert>
 #include <memory>
 #include <algorithm>
-
-#include <iostream>
 
 namespace imzb {
 

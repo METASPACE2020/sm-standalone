@@ -43,6 +43,7 @@ class Sorter {
   };
 
   void merge() {
+    std::cout << "merging files..." << std::endl;
     std::priority_queue<PeakAndFile> queue;
 
     std::vector<std::shared_ptr<imzb::ImzbReader>> readers;
@@ -67,11 +68,13 @@ class Sorter {
 
     writer.close();
 
+    std::cout << "removing temporary files" << std::endl;
     for (const auto& fn: tmp_filenames_) {
       std::remove(fn.c_str());
       auto idx_fn = fn + ".idx";
       std::remove(idx_fn.c_str());
     }
+    std::cout << "done!" << std::endl;
   }
 
   imzb::Mask mask_;
@@ -79,6 +82,7 @@ public:
   Sorter(const std::string& filename, size_t buffer_size=10000000) :
     fn_(filename),buffer_(buffer_size), filled_(0), closed_(false)
   {
+    std::cout << "dumping chunks sorted by m/z..." << std::endl;
   }
 
   void setMask(const imzb::Mask& mask) {
@@ -105,15 +109,15 @@ public:
 
 int main(int argc, char** argv) {
   if (argc == 1) {
-    std::cout << "usage: ./convert <file.imzML> <out.imzb>";
+    std::cout << "usage: ./convert <file.imzML> <out.imzb>" << std::endl;
     return 0;
   }
 
   imzml::ImzmlReader imzml(argv[1]);
-  Sorter sorter(argv[2]);
   imzb::Mask mask{imzml.height(), imzml.width()};
   
-  std::vector<std::string> tmp_filenames_;
+  Sorter sorter(argv[2]);
+
   ims::Spectrum sp;
   while (imzml.readNextSpectrum(sp)) {
     for (size_t i = 0; i < sp.mzs.size(); ++i) {
