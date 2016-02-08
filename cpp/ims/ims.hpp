@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ims_image.h"
-#include "ims_measures.h"
+#include "ims/image.hpp"
+#include "ims/image_measures.hpp"
 
 #include <vector>
 #include <cstdint>

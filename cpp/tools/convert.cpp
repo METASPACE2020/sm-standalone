@@ -1,6 +1,6 @@
-#include "imzml_reader.h"
-#include "imzb_reader.h"
-#include "imzb_writer.h"
+#include "imzml/reader.hpp"
+#include "imzb/reader.hpp"
+#include "imzb/writer.hpp"
 
 #include <iostream>
 #include <vector>
@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
 
   imzml::ImzmlReader imzml(argv[1]);
   imzb::Mask mask{imzml.height(), imzml.width()};
-  
+
   Sorter sorter(argv[2]);
 
   ims::Spectrum sp;

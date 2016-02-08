@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ims_image.h"
-#include "isotope_pattern.h"
+#include "ims/image.hpp"
+#include "ms/isotope_pattern.hpp"
 
 #include <vector>
 #include <valarray>
@@ -19,6 +19,6 @@ namespace ims {
   double isotopePatternMatch(const ims::ImageF* images, size_t n,
                              const ms::IsotopePattern& pattern);
 
-  double isotopePatternMatch(const std::vector<ims::ImageF>& images,
+	double isotopePatternMatch(const std::vector<ims::ImageF>& images,
                              const ms::IsotopePattern& pattern);
 }

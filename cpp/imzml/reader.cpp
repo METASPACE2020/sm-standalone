@@ -3,7 +3,7 @@
 #include <fstream>
 #include <algorithm>
 
-#include "imzml_reader.h"
+#include "imzml/reader.hpp"
 
 namespace imzml {
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "periodic_table.h"
+#include "ms/periodic_table.hpp"
 
 #include <string>
 #include <sstream>

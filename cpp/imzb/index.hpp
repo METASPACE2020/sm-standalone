@@ -1,7 +1,7 @@
 #pragma once
 
-#include "imzb_fileheader.h"
-#include "imzb_fileutils.h"
+#include "imzb/fileheader.hpp"
+#include "imzb/fileutils.hpp"
 
 #include <vector>
 #include <memory>

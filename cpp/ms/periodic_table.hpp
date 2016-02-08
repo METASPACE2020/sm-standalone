@@ -1,10 +1,10 @@
 #pragma once
 
+#include "ms/isotope_pattern.hpp"
+
 #include <map>
 #include <vector>
 #include <string>
-
-#include "isotope_pattern.h"
 
 namespace ms {
 

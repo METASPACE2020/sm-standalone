@@ -1,5 +1,5 @@
-#include "isotope_pattern.h"
-#include "periodic_table.h"
+#include "ms/isotope_pattern.hpp"
+#include "ms/periodic_table.hpp"
 
 #include <vector>
 #include <algorithm>

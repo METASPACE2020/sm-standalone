@@ -1,4 +1,4 @@
-#include "imzb_reader.h"
+#include "imzb/reader.hpp"
 
 extern "C" {
   void* imzb_reader_new(const char* filename) {

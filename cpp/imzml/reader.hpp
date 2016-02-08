@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ims.h"
+#include "ims/ims.hpp"
 
 #include <libxml2/libxml/xmlreader.h>
 #include <cstdint>

@@ -1,9 +1,9 @@
 #pragma once
 
-#include "ims.h"
-#include "imzb_fileutils.h"
-#include "imzb_fileheader.h"
-#include "imzb_index.h"
+#include "ims/ims.hpp"
+#include "imzb/fileutils.hpp"
+#include "imzb/fileheader.hpp"
+#include "imzb/index.hpp"
 #include "blosc.h"
 
 #include <string>

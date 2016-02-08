@@ -1,4 +1,4 @@
-#include "ims_measures.h"
+#include "ims/image_measures.hpp"
 
 namespace ims {
   double isotopeImageCorrelation(const ims::ImageF* images, size_t n,

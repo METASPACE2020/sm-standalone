@@ -1,4 +1,4 @@
-#include "isocalc.h"
+#include "ms/isocalc.hpp"
 
 #include "fftw3.h"
 #include <cassert>

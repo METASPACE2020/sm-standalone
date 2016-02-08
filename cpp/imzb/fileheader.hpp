@@ -1,6 +1,6 @@
 #pragma once
 
-#include "imzb_fileutils.h"
+#include "imzb/fileutils.hpp"
 
 #include <cstdint>
 #include <vector>
