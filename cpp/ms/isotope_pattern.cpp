@@ -41,6 +41,7 @@ void IsotopePattern::normalize() {
         std::swap(masses[i], masses[j]);
       }
   auto top = abundances[0];
+  assert(top > 0);
   for (auto& item: abundances)
     item /= top;
 }

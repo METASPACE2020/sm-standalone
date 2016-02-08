@@ -1,18 +1,10 @@
 cmake_minimum_required(VERSION 2.8)
 project(SM_standalone)
 
-# cxxopts - command line options parser
+find_package(Boost REQUIRED COMPONENTS program_options)
+include_directories(${Boost_INCLUDE_DIRS})
+
 include(ExternalProject)
-externalproject_add(cxxopts
-  GIT_REPOSITORY https://github.com/jarro2783/cxxopts
-  GIT_TAG aec97a6f53c3486fc51e0d9857f10b683180d668
-  UPDATE_COMMAND ""
-  INSTALL_COMMAND ""
-  BUILD_COMMAND ""
-  CONFIGURE_COMMAND ""
-  )
-ExternalProject_Get_Property(cxxopts source_dir)
-include_directories(${source_dir}/src)
 
 # MessagePack - simple serialization library
 externalproject_add(msgpack
@@ -39,6 +31,7 @@ include_directories(${source_dir}/blosc/)
 find_package(OpenMP REQUIRED)
 find_package(LibXml2 REQUIRED)
 find_package(ZLIB REQUIRED)
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
 include_directories(${LIBXML2_INCLUDE_DIR})
 
@@ -53,7 +46,7 @@ if("${PROJECT_SOURCE_DIR}" STREQUAL "${PROJECT_BINARY_DIR}")
 endif("${PROJECT_SOURCE_DIR}" STREQUAL "${PROJECT_BINARY_DIR}")
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -g -std=c++11")
 add_compile_options(-O2)
 
 set(SRC_COMMON
@@ -68,12 +61,17 @@ set(LIB_COMMON
   ${FFTW_LIBRARY}
   ${BLOSC_LIBRARY}
   ${CMAKE_THREAD_LIBS_INIT}
+  ${Boost_PROGRAM_OPTIONS_LIBRARY}
   )
 
 add_executable(convert tools/convert.cpp
   imzml/reader.cpp ${SRC_COMMON})
 target_link_libraries(convert ${LIB_COMMON})
 add_dependencies(convert blosc)
+
+add_executable(isocalc tools/isocalc.cpp ${SRC_COMMON})
+target_link_libraries(isocalc ${LIB_COMMON})
+add_dependencies(isocalc blosc msgpack)
 
 add_library(imzb SHARED cffi/imzb_cffi.cpp)
 target_link_libraries(convert ${LIBXML2_LIBRARIES} ${BLOSC_LIBRARY})
