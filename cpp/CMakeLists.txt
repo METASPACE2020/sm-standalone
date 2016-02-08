@@ -73,6 +73,10 @@ add_executable(isocalc tools/isocalc.cpp ${SRC_COMMON})
 target_link_libraries(isocalc ${LIB_COMMON})
 add_dependencies(isocalc blosc msgpack)
 
+add_executable(detect tools/detect.cpp ${SRC_COMMON})
+target_link_libraries(detect ${LIB_COMMON})
+add_dependencies(detect blosc msgpack)
+
 add_library(imzb SHARED cffi/imzb_cffi.cpp)
 target_link_libraries(convert ${LIBXML2_LIBRARIES} ${BLOSC_LIBRARY})
 add_dependencies(imzb blosc)

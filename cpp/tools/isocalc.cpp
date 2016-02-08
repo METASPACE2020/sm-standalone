@@ -80,7 +80,8 @@ int main(int argc, char** argv) {
 
   utils::IsotopePatternDB db{sum_formulas, target_adducts};
   utils::OrbitrapProfile orbitrap{resolution};
-  db.computeIsotopePatterns(orbitrap, output_file, max_peaks);
+  db.computeIsotopePatterns(orbitrap, max_peaks);
+  db.save(output_file);
 
   std::cout << "Isotope patterns have been saved to " << output_file << std::endl;
 

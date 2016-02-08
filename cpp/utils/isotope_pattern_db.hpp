@@ -8,6 +8,8 @@
 #include <vector>
 #include <mutex>
 #include <fstream>
+#include <cassert>
+#include <iostream>
 
 namespace utils {
 
@@ -36,6 +38,9 @@ class IsotopePatternDB {
   typedef std::pair<std::string, std::string> SFAdductPair;
   std::vector<SFAdductPair> pairs_;
 
+  // use a simple structure that doesn't require special msgpack methods
+  std::map<SFAdductPair, std::map<std::string, std::vector<double>>> patterns_;
+
   static std::vector<SFAdductPair> makePairs(
     const std::vector<std::string>& sum_formulas,
     const std::vector<std::string>& adducts)
@@ -59,16 +64,16 @@ public:
   {
   }
 
+  IsotopePatternDB(const std::string& dump_filename) {
+    load(dump_filename);
+  }
+
   void computeIsotopePatterns(const utils::InstrumentProfile& instrument,
-                              const std::string& output_filename,
                               size_t max_peaks=5)
   {
-    // use a simple structure that doesn't require special msgpack methods
-    std::map<SFAdductPair, std::map<std::string, std::vector<double>>> patterns;
-
     std::mutex map_mutex;
 
-#pragma omp parallel for shared(patterns)
+#pragma omp parallel for
     for (size_t i = 0; i < pairs_.size(); i++) {
       const auto& f = pairs_[i].first;
       auto adduct = pairs_[i].second;
@@ -81,15 +86,48 @@ public:
                          .centroids(res).charged(charge).trimmed(max_peaks);
       auto key = std::make_pair(f, adduct);
       std::lock_guard<std::mutex> lock(map_mutex);
-      patterns[key]["mzs"] = pattern.masses;
-      patterns[key]["abundances"] = pattern.abundances;
+      patterns_[key]["mzs"] = pattern.masses;
+      patterns_[key]["abundances"] = pattern.abundances;
     }
+  }
 
+  void save(const std::string& output_filename) {
     // TODO: write instrument profile parameters?
     msgpack::sbuffer sbuf;
-    msgpack::pack(sbuf, patterns);
+    msgpack::pack(sbuf, patterns_);
     std::ofstream db(output_filename, std::ios::binary);
     db.write(sbuf.data(), sbuf.size());
+  }
+
+  void load(const std::string& input_filename) {
+    // load precomputed isotope patterns from msgpack file
+    std::ifstream in(input_filename, std::ios::binary | std::ios::ate);
+    size_t bufsize = in.tellg();
+    msgpack::sbuffer sbuf(bufsize);
+    in.seekg(0, std::ios::beg);
+    in.read(sbuf.data(), bufsize);
+    in.close();
+
+    msgpack::unpacked unpacked;
+    msgpack::unpack(&unpacked, sbuf.data(), bufsize);
+
+    msgpack::object obj = unpacked.get();
+    obj.convert(patterns_);
+    for (auto& item: patterns_) pairs_.push_back(item.first);
+  }
+
+  ms::IsotopePattern operator()(const std::string& formula, const std::string& adduct) const {
+    auto& entry = patterns_.at(std::make_pair(formula, adduct));
+    return ms::IsotopePattern{entry.at("mzs"), entry.at("abundances")};
+  }
+
+  size_t size() const {
+    assert(patterns_.size() == pairs_.size());
+    return patterns_.size();
+  }
+
+  const std::vector<std::pair<std::string, std::string>>& keys() const {
+    return pairs_;
   }
 };
 
