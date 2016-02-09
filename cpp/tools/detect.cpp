@@ -21,6 +21,7 @@ int main(int argc, char** argv) {
   std::string db_filename, imzb_filename;
   std::string output_filename;
   double ppm;
+  bool remove_hotspots;
 
   namespace po = boost::program_options;
 
@@ -29,6 +30,8 @@ int main(int argc, char** argv) {
     ("ppm", po::value<double>(&ppm)->default_value(3.0),
      "m/z-window half-width in ppm")
     ("out", po::value<std::string>(&output_filename)->default_value("/dev/stdout"))
+    ("remove-hotspots", po::value<bool>(&remove_hotspots)->default_value(true),
+     "apply hotspot removal prior to computing metrics")
     ("help", "Print help");
 
   po::options_description hidden;
@@ -46,7 +49,7 @@ int main(int argc, char** argv) {
   po::notify(vm);
 
   if (vm.count("help") || imzb_filename.empty() || db_filename.empty()) {
-    std::cout << "Usage: isocalc [options] <isotope_patterns.db> <input.imzb>\n";
+    std::cout << "Usage: detect [options] <isotope_patterns.db> <input.imzb>\n";
     std::cout << desc << std::endl;
     return 0;
   }
@@ -59,6 +62,7 @@ int main(int argc, char** argv) {
   std::vector<Metrics> metrics(keys.size());
 
   thread_local std::vector<ims::ImageF> images;
+  thread_local std::vector<float> hotspot_removal_buf;
 
 #pragma omp parallel for
   for (size_t i = 0; i < keys.size(); i++) {
@@ -74,8 +78,14 @@ int main(int argc, char** argv) {
         images.emplace_back(reader.height(), reader.width());
     }
 
-    for (size_t j = 0; j < p.size(); ++j)
+    if (remove_hotspots && hotspot_removal_buf.empty())
+      hotspot_removal_buf.resize(reader.width() * reader.height());
+
+    for (size_t j = 0; j < p.size(); ++j) {
       reader.readImage(p.masses[j], ppm, images[j].rawPtr());
+      if (remove_hotspots)
+        images[j].removeHotspots(99.0, &hotspot_removal_buf[0]);
+    }
 
     auto img_corr = ims::isotopeImageCorrelation(&images[0], p.size(), p);
     auto iso_corr = ims::isotopePatternMatch(&images[0], p.size(), p);
