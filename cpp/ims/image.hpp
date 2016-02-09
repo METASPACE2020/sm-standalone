@@ -56,6 +56,8 @@ class Image {
     for (T i: intensities_)
       if (i > 0)
         *pend++ = i;
+    if (tmpbuf == pend)
+      return; // empty image
     size_t k = size_t((pend - tmpbuf) * percentile) / 100;
     std::nth_element(tmpbuf, tmpbuf + k, pend);
     T threshold = tmpbuf[k];

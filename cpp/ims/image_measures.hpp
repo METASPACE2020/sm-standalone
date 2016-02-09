@@ -21,4 +21,6 @@ namespace ims {
 
   double isotopePatternMatch(const std::vector<ims::ImageF>& images,
       const ms::IsotopePattern& pattern);
+
+  double measureOfChaos(const ims::ImageF& image, size_t n_levels=32);
 }

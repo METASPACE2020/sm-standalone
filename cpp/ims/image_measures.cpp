@@ -1,4 +1,8 @@
+#include "ims/image.hpp"
 #include "ims/image_measures.hpp"
+
+#include <cstdint>
+#include <limits>
 
 namespace ims {
   double isotopeImageCorrelation(const ims::ImageF* images, size_t n,
@@ -68,5 +72,145 @@ namespace ims {
   double isotopePatternMatch(const std::vector<ims::ImageF>& images,
                              const ms::IsotopePattern& pattern) {
     return isotopePatternMatch(&images[0], images.size(), pattern);
+  }
+
+  double measureOfChaos(const ims::ImageF& image, size_t n_levels) {
+    assert(n_levels <= 32);
+    static thread_local std::vector<uint32_t> tmp1, tmp2, tmp3;
+
+    if (image.intensities().sum() + image.countEmptyPixels() < 1e-6)
+      return 0;
+
+    tmp1.assign(image.width() * image.height(), 0);
+    tmp2.assign(image.width() * image.height(), 0);
+    tmp3.assign(image.width() * image.height(), 0);
+
+    std::vector<float> levels(n_levels + 1);
+    const auto& intensities = image.intensities();
+    auto max = *std::max_element(std::begin(intensities), std::end(intensities));
+    for (size_t i = 0; i < n_levels; i++)
+      levels[i] = float(max * i) / n_levels;
+    levels[n_levels] = std::numeric_limits<float>::max();
+
+    // set bits indicating if i-th pixel is in j-th level set
+    for (size_t i = 0; i < intensities.size(); i++)
+      for (size_t j = 0; intensities[i] > levels[j]; j++)
+        tmp1[i] <<= 1, tmp1[i] |= 1;
+
+    size_t w = image.width(), h = image.height();
+
+#define idx(x, y) ((x) * w + (y))
+
+    // dilate with 4-connectivity 3x3 structuring element
+    std::copy(tmp1.begin(), tmp1.end(), tmp2.begin());
+    for (size_t y = 0; y < w; y++) {
+      for (size_t x = 0; x < h; x++) {
+        auto mask = tmp1[idx(x, y)];
+        if (y > 0) tmp2[idx(x, y - 1)] |= mask;
+        if (y < w - 1) tmp2[idx(x, y + 1)] |= mask;
+        if (x > 0) tmp2[idx(x - 1, y)] |= mask;
+        if (x < h - 1) tmp2[idx(x + 1, y)] |= mask;
+      }
+    }
+
+    // erode with 8-connectivity 3x3 structuring element
+    std::copy(tmp2.begin(), tmp2.end(), tmp1.begin());
+    constexpr int d[8][2] = {{-1, -1}, {-1, 0}, {-1, 1}, {0, -1}, {0, 1}, {1, -1}, {1, 0}, {1, 1}};
+
+    for (size_t y = 0; y < w; y++)
+      for (size_t x = 0; x < h; x++)
+        for (size_t i = 0; i < 8; i++) {
+          int nx = x + d[i][0], ny = y + d[i][1];
+          if (nx >= 0 && nx < h && ny >= 0 && ny < w)
+            tmp1[idx(x, y)] &= tmp2[idx(nx, ny)];
+        }
+
+    auto& parent = tmp3; // union-find structure
+
+    auto findRoot = [&](uint32_t i) -> uint32_t {
+      uint32_t root = i;
+      while (parent[root] < root)
+        root = parent[root];
+      return root;
+    };
+
+#define setRoot(i, r) do {\
+  uint32_t tmp, s = i;\
+  while (parent[s] < s)\
+    tmp = parent[s], parent[s] = (r), s = tmp;\
+  parent[s] = (r);\
+} while(0);
+
+    auto mergeLabels = [&](uint32_t i, uint32_t j) -> uint32_t {
+      auto r = findRoot(i);
+      if (i != j) {
+        r = std::min(r, findRoot(j));
+        setRoot(j, r);
+      }
+      setRoot(i, r);
+      return r;
+    };
+
+    uint32_t l = 1;
+    auto& labels = tmp2; // pixel labels
+
+    uint32_t mask = 0;
+
+#define isSet(x, y) (tmp1[idx((x), (y))] & mask)
+
+    std::vector<float> counts(n_levels);
+
+    // count numbers of connected components with 4-connectivity for each level set
+    for (size_t i = 0; i < n_levels; i++) {
+      mask = 1UL << i;
+
+      parent[0] = 0;
+      labels.assign(labels.size(), 0);
+      l = 1;
+
+      for (size_t y = 0; y < w; y++)
+        for (size_t x = 0; x < h; x++) {
+          if (!isSet(x, y)) {
+            labels[idx(x, y)] = 0;
+            continue;
+          }
+          bool up = x > 0 && isSet(x - 1, y);
+          bool left = y > 0 && isSet(x, y - 1);
+          if (up && left)
+            labels[idx(x, y)] = mergeLabels(labels[idx(x - 1, y)], labels[idx(x, y - 1)]);
+          else if (up)
+            labels[idx(x, y)] = labels[idx(x - 1, y)];
+          else if (left)
+            labels[idx(x, y)] = labels[idx(x, y - 1)];
+          else
+            labels[idx(x, y)] = parent[l] = l, l += 1;
+        }
+
+      uint32_t n_components = 1;
+      for (size_t i = 1; i < l; i++) {
+        if (parent[i] < i)
+          parent[i] = parent[parent[i]];
+        else
+          parent[i] = n_components++;
+      }
+
+      counts[i] = n_components - 1;
+    }
+
+    double avg_n_objects = 0.0;
+    for (auto x: counts)
+      avg_n_objects += x;
+    avg_n_objects /= counts.size();
+
+    double not_null = 0.0;
+    for (auto x: intensities)
+      not_null += x > 0;
+
+    // FIXME: works badly on noisy images with few pixels:
+    //        dilation + erosion leave almost nothing,
+    //        that leads to small number of objects divided by
+    //        large number of pixels
+
+    return 1.0 - avg_n_objects / not_null;
   }
 }

@@ -15,6 +15,7 @@
 struct Metrics {
   double img_corr;
   double iso_corr;
+  double moc;
 };
 
 int main(int argc, char** argv) {
@@ -89,14 +90,15 @@ int main(int argc, char** argv) {
 
     auto img_corr = ims::isotopeImageCorrelation(&images[0], p.size(), p);
     auto iso_corr = ims::isotopePatternMatch(&images[0], p.size(), p);
-    metrics[i] = Metrics{img_corr, iso_corr};
+    auto moc = ims::measureOfChaos(images[0], 30);
+    metrics[i] = Metrics{img_corr, iso_corr, moc};
   }
 
   for (size_t i = 0; i < keys.size(); ++i) {
     std::string f = keys[i].first;
     std::string adduct = keys[i].second;
     out << f << "\t" << adduct << "\t" <<
-      metrics[i].img_corr << "\t" << metrics[i].iso_corr << "\n";
+      metrics[i].img_corr << "\t" << metrics[i].iso_corr << "\t" << metrics[i].moc << "\n";
   }
 
   return 0;
