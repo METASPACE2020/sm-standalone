@@ -56,29 +56,30 @@ set(SRC_COMMON
   ms/periodic_table.cpp
   )
 
+add_library(ims STATIC ${SRC_COMMON})
+target_link_libraries(ims ${FFTW_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
+
 set(LIB_COMMON
-  ${LIBXML2_LIBRARIES}
-  ${FFTW_LIBRARY}
+  ims
   ${BLOSC_LIBRARY}
-  ${CMAKE_THREAD_LIBS_INIT}
   ${Boost_PROGRAM_OPTIONS_LIBRARY}
   )
 
 add_executable(convert tools/convert.cpp
   imzml/reader.cpp ${SRC_COMMON})
 target_link_libraries(convert ${LIB_COMMON})
-add_dependencies(convert blosc)
+add_dependencies(convert blosc ims)
 
-add_executable(isocalc tools/isocalc.cpp ${SRC_COMMON})
+add_executable(isocalc tools/isocalc.cpp)
 target_link_libraries(isocalc ${LIB_COMMON})
-add_dependencies(isocalc blosc msgpack)
+add_dependencies(isocalc blosc msgpack ims)
 
 add_executable(detect tools/detect.cpp ${SRC_COMMON})
 target_link_libraries(detect ${LIB_COMMON})
-add_dependencies(detect blosc msgpack)
+add_dependencies(detect blosc msgpack ims)
 
 add_library(imzb SHARED cffi/imzb_cffi.cpp)
-target_link_libraries(convert ${LIBXML2_LIBRARIES} ${BLOSC_LIBRARY})
-add_dependencies(imzb blosc)
+target_link_libraries(convert ${LIBXML2_LIBRARIES} ${LIB_COMMON})
+add_dependencies(imzb blosc ims)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1) # for Vim autocompletion
