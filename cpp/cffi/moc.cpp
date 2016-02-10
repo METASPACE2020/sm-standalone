@@ -1,11 +1,13 @@
 #include "ims/image_measures.hpp"
 
+#include <cmath>
+
 template <typename T>
 double measure_of_chaos(T* image, int width, int height, int n_levels) {
   ims::ImageF img(height, width);
   auto p = img.rawPtr();
   for (size_t i = 0, n = height * width; i < n; i++)
-    p[i] = image[i];
+    p[i] = isnan(image[i]) ? -1.0 : image[i];
   return measureOfChaos(img, n_levels);
 }
 
