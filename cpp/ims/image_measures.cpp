@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <cstring>
 
 namespace ims {
   double isotopeImageCorrelation(const ims::ImageF* images, size_t n,
@@ -75,21 +76,22 @@ namespace ims {
   }
 
   double measureOfChaos(const ims::ImageF& image, size_t n_levels) {
+    assert(n_levels > 0);
     assert(n_levels <= 32);
-    static thread_local std::vector<uint32_t> tmp1, tmp2, tmp3;
-
-    if (image.intensities().sum() + image.countEmptyPixels() < 1e-6)
-      return 0;
+    std::vector<uint32_t> tmp1, tmp2, tmp3;
 
     tmp1.assign(image.width() * image.height(), 0);
-    tmp2.assign(image.width() * image.height(), 0);
-    tmp3.assign(image.width() * image.height(), 0);
+    tmp2.resize(image.width() * image.height());
+    tmp3.resize(image.width() * image.height());
 
     std::vector<float> levels(n_levels + 1);
     const auto& intensities = image.intensities();
     auto max = *std::max_element(std::begin(intensities), std::end(intensities));
+
+    // FIXME: n_levels - 1 is only for compatibility with pyIMS code,
+    //        it would be more sensible to divide by n_levels
     for (size_t i = 0; i < n_levels; i++)
-      levels[i] = float(max * i) / n_levels;
+      levels[i] = float(max * i) / (n_levels - 1);
     levels[n_levels] = std::numeric_limits<float>::max();
 
     // set bits indicating if i-th pixel is in j-th level set
@@ -165,13 +167,12 @@ namespace ims {
       mask = 1UL << i;
 
       parent[0] = 0;
-      labels.assign(labels.size(), 0);
+      memset(&labels[0], 0, labels.size() * sizeof(labels[0]));
       l = 1;
 
       for (size_t y = 0; y < w; y++)
         for (size_t x = 0; x < h; x++) {
           if (!isSet(x, y)) {
-            labels[idx(x, y)] = 0;
             continue;
           }
           bool up = x > 0 && isSet(x - 1, y);

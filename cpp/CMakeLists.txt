@@ -47,7 +47,7 @@ endif("${PROJECT_SOURCE_DIR}" STREQUAL "${PROJECT_BINARY_DIR}")
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -std=c++11")
-add_compile_options(-g -O2)
+add_compile_options(-g -fPIC -O2)
 
 set(SRC_COMMON
   ims/image_measures.cpp
@@ -78,8 +78,14 @@ add_executable(detect tools/detect.cpp ${SRC_COMMON})
 target_link_libraries(detect ${LIB_COMMON})
 add_dependencies(detect blosc msgpack ims)
 
+# shared libraries to be called from Python
 add_library(imzb SHARED cffi/imzb_cffi.cpp)
 target_link_libraries(convert ${LIBXML2_LIBRARIES} ${LIB_COMMON})
 add_dependencies(imzb blosc ims)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS 1) # for Vim autocompletion
+add_library(moc SHARED cffi/moc.cpp)
+target_link_libraries(moc ${LIB_COMMON})
+add_dependencies(moc ims)
+
+# export compilation database for Vim autocompletion with YCM
+set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
