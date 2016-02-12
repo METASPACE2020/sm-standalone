@@ -21,8 +21,8 @@ from pyIMS.ion_datacube import ion_datacube
 
 import cffi
 ffi = cffi.FFI()
-ffi.cdef(open("cpp/imzb_cffi.h").read())
-imzb = ffi.dlopen("./cpp/libimzb.so")
+ffi.cdef(open("cpp/cffi/imzb_cffi.h").read())
+imzb = ffi.dlopen("./cpp/build/libimzb.so")
 
 class ImzbReader(object):
     def __init__(self, filename):
@@ -272,7 +272,7 @@ def show_images_get():
         stats = {'measure of chaos': chaos,
                  'image correlation score': img_corr,
                  'isotope pattern score': iso_corr}
-        
+
         isotope_patterns[adduct] = (mzs, intensities, stats)
     return bottle.template('show_images', hs_removal=hs_removal,
                            isotope_patterns=isotope_patterns, formula=formula, selected_adduct=selected_adduct,
@@ -281,4 +281,4 @@ def show_images_get():
                            selected_dataset=dataset)
 
 import sys
-app.run(sys.argv[1:], port=8080)
+app.run(sys.argv[1:], port=8085)

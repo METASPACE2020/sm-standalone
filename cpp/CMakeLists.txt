@@ -1,10 +1,13 @@
 cmake_minimum_required(VERSION 2.8)
 project(SM_standalone)
 
+set(Boost_USE_STATIC_LIBS ON)
 find_package(Boost REQUIRED COMPONENTS program_options)
 include_directories(${Boost_INCLUDE_DIRS})
 
 include(ExternalProject)
+
+add_compile_options(-g -fPIC -O2)
 
 # MessagePack - simple serialization library
 externalproject_add(msgpack
@@ -22,7 +25,7 @@ externalproject_add(blosc
   GIT_REPOSITORY https://github.com/Blosc/c-blosc
   GIT_TAG v1.7.1
   INSTALL_COMMAND ""
-  CMAKE_ARGS -DBUILD_TESTS:BOOL=OFF -DBUILD_BENCHMARKS:BOOL=OFF
+  CMAKE_ARGS -DBUILD_TESTS:BOOL=OFF -DBUILD_BENCHMARKS:BOOL=OFF -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
   )
 
 ExternalProject_Get_Property(blosc source_dir)
@@ -47,7 +50,6 @@ endif("${PROJECT_SOURCE_DIR}" STREQUAL "${PROJECT_BINARY_DIR}")
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -std=c++11")
-add_compile_options(-g -fPIC -O2)
 
 set(SRC_COMMON
   ims/image_measures.cpp
@@ -67,7 +69,7 @@ set(LIB_COMMON
 
 add_executable(convert tools/convert.cpp
   imzml/reader.cpp ${SRC_COMMON})
-target_link_libraries(convert ${LIB_COMMON})
+target_link_libraries(convert ${LIBXML2_LIBRARIES} ${LIB_COMMON})
 add_dependencies(convert blosc ims)
 
 add_executable(isocalc tools/isocalc.cpp)
@@ -78,9 +80,11 @@ add_executable(detect tools/detect.cpp ${SRC_COMMON})
 target_link_libraries(detect ${LIB_COMMON})
 add_dependencies(detect blosc msgpack ims)
 
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/)
+
 # shared libraries to be called from Python
 add_library(imzb SHARED cffi/imzb_cffi.cpp)
-target_link_libraries(convert ${LIBXML2_LIBRARIES} ${LIB_COMMON})
+target_link_libraries(imzb ${LIBXML2_LIBRARIES} ${LIB_COMMON})
 add_dependencies(imzb blosc ims)
 
 add_library(moc SHARED cffi/moc.cpp)
