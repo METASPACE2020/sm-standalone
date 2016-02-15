@@ -47,6 +47,9 @@ public:
 
   uint32_t height() const { return index_->header.mask.height; }
   uint32_t width() const { return index_->header.mask.width; }
+
+  void close() { in_.close(); }
+  const std::string& filename() const { return fn_; }
 };
 
 }

@@ -69,9 +69,11 @@ class Sorter {
     writer.close();
 
     std::cout << "removing temporary files" << std::endl;
-    for (const auto& fn: tmp_filenames_) {
-      std::remove(fn.c_str());
+    for (const auto& r: readers) {
+      auto fn = r->filename();
       auto idx_fn = fn + ".idx";
+      r->close();
+      std::remove(fn.c_str());
       std::remove(idx_fn.c_str());
     }
     std::cout << "done!" << std::endl;

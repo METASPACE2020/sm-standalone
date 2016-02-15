@@ -62,10 +62,10 @@ int main(int argc, char** argv) {
   auto& keys = db.keys();
   std::vector<Metrics> metrics(keys.size());
 
-  thread_local std::vector<ims::ImageF> images;
-  thread_local std::vector<float> hotspot_removal_buf;
+  std::vector<ims::ImageF> images;
+  std::vector<float> hotspot_removal_buf;
 
-#pragma omp parallel for
+#pragma omp parallel for private(images, hotspot_removal_buf)
   for (size_t i = 0; i < keys.size(); i++) {
     std::string f = keys[i].first;
     std::string adduct = keys[i].second;

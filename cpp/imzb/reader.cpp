@@ -6,9 +6,11 @@
 #include <cassert>
 #include <algorithm>
 
+#include <iostream>
+
 imzb::ImzbReader::ImzbReader(const std::string& filename) :
     fn_(filename),
-    in_(filename), block_idx_(0), peaks_(imzb::ImzbWriter::BLOCK_SIZE),
+    in_(filename, std::ios::binary), block_idx_(0), peaks_(imzb::ImzbWriter::BLOCK_SIZE),
     n_peaks_(0), pos_(0), empty_(false)
 {
   std::ifstream in_idx(filename + ".idx", std::ios::binary);
@@ -18,6 +20,7 @@ imzb::ImzbReader::ImzbReader(const std::string& filename) :
 
   in_.seekg(0, in_.end);
   index_->offsets.push_back(in_.tellg());
+
   in_.seekg(0, in_.beg);
 }
 
@@ -28,11 +31,14 @@ size_t imzb::ImzbReader::decompressBlock(size_t block_idx,
 {
   uint64_t start = index_->offsets[block_idx];
   uint64_t end = index_->offsets[block_idx + 1];
+
   inbuf.resize(end - start);
   in.seekg(start);
   in.read(&inbuf[0], end - start);
-  return blosc_decompress_ctx(&inbuf[0], &outbuf[0],
-      outbuf.size() * sizeof(ims::Peak), 1) / sizeof(ims::Peak);
+  int result = blosc_decompress_ctx(&inbuf[0], &outbuf[0],
+      outbuf.size() * sizeof(ims::Peak), 1);
+  assert(result > 0);
+  return result / sizeof(ims::Peak);
 }
 
 bool imzb::ImzbReader::readNextBlock()
