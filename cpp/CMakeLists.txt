@@ -7,7 +7,7 @@ include_directories(${Boost_INCLUDE_DIRS})
 
 include(ExternalProject)
 
-add_compile_options(-g -fPIC -O2)
+add_compile_options(-g -O2)
 
 # MessagePack - simple serialization library
 externalproject_add(msgpack
@@ -51,7 +51,14 @@ endif("${PROJECT_SOURCE_DIR}" STREQUAL "${PROJECT_BINARY_DIR}")
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -std=c++11")
 
+if ( WIN32 )
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Bstatic -static-libstdc++ -static-libgcc")
+  add_definitions(-DIN_LIBXML)
+endif()
+
 set(SRC_COMMON
+  imzb/reader.cpp
+  imzb/writer.cpp
   ims/image_measures.cpp
   ms/isocalc.cpp
   ms/isotope_pattern.cpp
@@ -59,37 +66,39 @@ set(SRC_COMMON
   )
 
 add_library(ims STATIC ${SRC_COMMON})
-target_link_libraries(ims ${FFTW_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(ims ${FFTW_LIBRARY} ${CMAKE_THREAD_LIBS_INIT} ${BLOSC_LIBRARY})
 
 set(LIB_COMMON
   ims
-  ${BLOSC_LIBRARY}
   ${Boost_PROGRAM_OPTIONS_LIBRARY}
   )
 
 add_executable(convert tools/convert.cpp
-  imzml/reader.cpp ${SRC_COMMON})
-target_link_libraries(convert ${LIBXML2_LIBRARIES} ${LIB_COMMON})
+  imzml/reader.cpp)
+if ( WIN32 )
+  target_link_libraries(convert -Wl,-Bstatic -lxml2 -lfftw3 -liconv ims -lws2_32)
+else()
+  target_link_libraries(convert ${LIBXML2_LIBRARIES} ${LIB_COMMON})
+endif()
 add_dependencies(convert blosc ims)
 
 add_executable(isocalc tools/isocalc.cpp)
-target_link_libraries(isocalc ${LIB_COMMON})
+if ( WIN32 )
+  target_link_libraries(isocalc -Wl,-Bstatic ${Boost_PROGRAM_OPTIONS_LIBRARY} -Wl,-Bstatic ims -lgomp -lfftw3 -lwinpthread -lws2_32)
+else()
+  target_link_libraries(isocalc ${LIB_COMMON})
+endif()
 add_dependencies(isocalc blosc msgpack ims)
 
-add_executable(detect tools/detect.cpp ${SRC_COMMON})
-target_link_libraries(detect ${LIB_COMMON})
+add_executable(detect tools/detect.cpp)
+if ( WIN32 )
+  target_link_libraries(detect -Wl,-Bstatic ${Boost_PROGRAM_OPTIONS_LIBRARY} -Wl,-Bstatic ims -lgomp -lwinpthread -lws2_32)
+else()
+  target_link_libraries(detect ${LIB_COMMON})
+endif()
 add_dependencies(detect blosc msgpack ims)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/)
-
-# shared libraries to be called from Python
-add_library(imzb SHARED cffi/imzb_cffi.cpp)
-target_link_libraries(imzb ${LIBXML2_LIBRARIES} ${LIB_COMMON})
-add_dependencies(imzb blosc ims)
-
-add_library(moc SHARED cffi/moc.cpp)
-target_link_libraries(moc ${LIB_COMMON})
-add_dependencies(moc ims)
 
 # export compilation database for Vim autocompletion with YCM
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
