@@ -38,9 +38,8 @@ struct Index {
     header.read(stream);
     double mz;
     uint64_t offset;
-    while (!stream.eof()) {
-      binary_read(stream, mz);
-      binary_read(stream, offset);
+    while (binary_read(stream, mz)) {
+      assert(binary_read(stream, offset));
       mzs.push_back(mz);
       offsets.push_back(offset);
     }

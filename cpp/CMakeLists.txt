@@ -52,7 +52,14 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -std=c++11 -pthread")
 
 if ( WIN32 )
+  # necessary for FFTW to work on 32-bit, as mentioned e.g. here: https://github.com/libgit2/libgit2/issues/3342
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mincoming-stack-boundary=2") 
+
+  # link all msys2/mingw libs statically on Windows
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Bstatic -static-libstdc++ -static-libgcc")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-Bstatic -static-libstdc++ -static-libgcc")
+
+  # necessary for static compilation
   add_definitions(-DIN_LIBXML)
 endif()
 
@@ -100,5 +107,13 @@ add_dependencies(detect blosc msgpack ims)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/)
 
-# export compilation database for Vim autocompletion with YCM
+add_library(ims_cffi SHARED cffi/image_measures.cpp cffi/imzb.cpp cffi/isocalc.cpp)
+if ( WIN32 )
+  target_link_libraries(ims_cffi -Wl,-Bstatic -lxml2 -lfftw3 -liconv ims -lwinpthread -lgomp -lws2_32)
+else()
+  target_link_libraries(ims_cffi blosc ims)
+endif()
+add_dependencies(ims_cffi blosc ims)
+
+# export compilation database for autocompletion
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)

@@ -28,7 +28,7 @@ struct Mask {
   bool hasSpectrumAt(uint32_t x, uint32_t y) {
     assert(x < height && y < width);
     size_t n = x * width + y;
-    return data[n / 64] & (1ULL << (n % 64));
+    return bool(data[n / 64] & (1ULL << (n % 64)));
   }
 
   void set(uint32_t x, uint32_t y) {

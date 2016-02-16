@@ -5,8 +5,7 @@
 #include <ios>
 #include <cassert>
 #include <algorithm>
-
-#include <iostream>
+#include <stdexcept>
 
 imzb::ImzbReader::ImzbReader(const std::string& filename) :
     fn_(filename),
@@ -14,6 +13,10 @@ imzb::ImzbReader::ImzbReader(const std::string& filename) :
     n_peaks_(0), pos_(0), empty_(false)
 {
   std::ifstream in_idx(filename + ".idx", std::ios::binary);
+  if (!in_.is_open())
+    throw std::runtime_error("couldn't open the file");
+  if (!in_idx.is_open())
+    throw std::runtime_error("couldn't open the index file");
 
   index_ = std::make_shared<Index>();
   index_->read(in_idx);
@@ -125,4 +128,3 @@ void imzb::ImzbReader::readImage(double mz, double ppm, float* image) const
   for (auto& peak: peaks)
     image[idx(peak.coords.x, peak.coords.y)] += peak.intensity;
 }
-
