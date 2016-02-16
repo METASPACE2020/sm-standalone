@@ -3,7 +3,9 @@ import numpy as np
 
 ffi = cffi.FFI()
 ffi.cdef(open("../cpp/cffi/ims.h").read())
-ims = ffi.dlopen("../cpp/build/libims_cffi")
+suffixes = {'Windows': 'dll', 'Linux': 'so', 'Darwin': 'dylib'}
+import platform
+ims = ffi.dlopen("../cpp/build/libims_cffi." + suffixes[platform.system()])
 
 class ImzbReader(object):
     def __init__(self, filename):

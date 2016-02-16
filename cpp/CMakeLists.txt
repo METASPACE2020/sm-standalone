@@ -7,7 +7,11 @@ include_directories(${Boost_INCLUDE_DIRS})
 
 include(ExternalProject)
 
-add_compile_options(-g -O2)
+if ( WIN32 )
+  add_compile_options(-g -O2)
+else()
+  add_compile_options(-g -fPIC -O2)
+endif()
 
 # MessagePack - simple serialization library
 externalproject_add(msgpack
@@ -111,7 +115,7 @@ add_library(ims_cffi SHARED cffi/image_measures.cpp cffi/imzb.cpp cffi/isocalc.c
 if ( WIN32 )
   target_link_libraries(ims_cffi -Wl,-Bstatic -lxml2 -lfftw3 -liconv ims -lwinpthread -lgomp -lws2_32)
 else()
-  target_link_libraries(ims_cffi blosc ims)
+  target_link_libraries(ims_cffi ims)
 endif()
 add_dependencies(ims_cffi blosc ims)
 
