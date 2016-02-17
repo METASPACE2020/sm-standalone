@@ -1,11 +1,11 @@
 import cffi
 import numpy as np
 
+from .utils import shared_lib, full_filename
+
 ffi = cffi.FFI()
-ffi.cdef(open("../cpp/cffi/ims.h").read())
-suffixes = {'Windows': 'dll', 'Linux': 'so', 'Darwin': 'dylib'}
-import platform
-ims = ffi.dlopen("../cpp/build/libims_cffi." + suffixes[platform.system()])
+ffi.cdef(open(full_filename("ims.h")).read())
+ims = ffi.dlopen(full_filename(shared_lib("ims_cffi")))
 
 class ImzbReader(object):
     def __init__(self, filename):

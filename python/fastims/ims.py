@@ -1,10 +1,10 @@
 import cffi
 
+from .utils import shared_lib, full_filename
+
 ffi = cffi.FFI()
-ffi.cdef(open("../cpp/cffi/ims.h").read())
-suffixes = {'Windows': 'dll', 'Linux': 'so', 'Darwin': 'dylib'}
-import platform
-ims = ffi.dlopen("../cpp/build/libims_cffi." + suffixes[platform.system()])
+ffi.cdef(open(full_filename("ims.h")).read())
+ims = ffi.dlopen(full_filename(shared_lib("ims_cffi")))
 
 class IsotopePattern(object):
     def __init__(self, sum_formula, threshold=1e-4, fft_threshold=1e-8):

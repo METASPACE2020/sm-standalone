@@ -45,7 +45,7 @@ include_directories(${LIBXML2_INCLUDE_DIR})
 ExternalProject_Get_Property(blosc binary_dir)
 set(BLOSC_LIBRARY ${binary_dir}/blosc/libblosc.a ${ZLIB_LIBRARY})
 
-find_library(FFTW_LIBRARY NAMES fftw3 fftw)
+find_library(FFTW_LIBRARY NAMES fftw3 fftw fftw-3.3)
 
 if("${PROJECT_SOURCE_DIR}" STREQUAL "${PROJECT_BINARY_DIR}")
   message(FATAL_ERROR "In-source builds are strongly discouraged. "
