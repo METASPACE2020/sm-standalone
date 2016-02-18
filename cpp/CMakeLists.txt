@@ -101,6 +101,9 @@ add_library(libims STATIC ${SRC_COMMON})
 set_target_properties(libims PROPERTIES OUTPUT_NAME ims)
 
 set(LIB_COMMON libims ${BLOSC_LIBRARY})
+if ( NOT APPLE )
+target_link_libraries(libims ${BLOSC_LIBRARY})
+endif()
 
 add_executable(ims-bin
   tools/main.cpp
@@ -127,7 +130,7 @@ if ( WIN32 )
 elseif ( APPLE )
   target_link_libraries(ims_cffi ${BLOSC_LIBRARY} libims /usr/local/opt/fftw/lib/libfftw3.a)
 else()
-  target_link_libraries(ims_cffi ${BLOSC_LIBRARY} -Wl,-Bstatic libims -lxml2 -lfftw3 -Wl,-Bdynamic -lpthread -lgomp)
+  target_link_libraries(ims_cffi -Wl,-Bstatic libims -lxml2 -lfftw3 -Wl,-Bdynamic -lpthread -lgomp)
 endif()
 add_dependencies(ims_cffi blosc libims)
 
