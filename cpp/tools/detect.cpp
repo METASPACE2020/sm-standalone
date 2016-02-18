@@ -17,13 +17,13 @@ struct Metrics {
   double moc;
 };
 
-int main(int argc, char** argv) {
+int detect_main(int argc, char** argv) {
   std::string db_filename, imzb_filename;
   std::string output_filename;
   double ppm;
   bool remove_hotspots;
 
-  cxxopts::Options options("detect", " <isotope_patterns.db> <input.imzb>");
+  cxxopts::Options options("ims detect", " <isotope_patterns.db> <input.imzb>");
   options.add_options()
     ("ppm", "m/z-window half-width in ppm",
      cxxopts::value<double>(ppm)->default_value("3.0"))

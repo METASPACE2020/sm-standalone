@@ -8,7 +8,7 @@
 #include <vector>
 #include <string>
 
-int main(int argc, char** argv) {
+int isocalc_main(int argc, char** argv) {
 
   double resolution;
   unsigned max_peaks;
@@ -17,7 +17,7 @@ int main(int argc, char** argv) {
 
   std::string adducts_str;
 
-  cxxopts::Options options("isocalc",
+  cxxopts::Options options("ims isocalc",
   " <input.txt> <output.db>\n\t\t\twhere input contains one sum formula per line.");
   options.add_options()
     ("resolution",      "Resolving power at m/z=200",

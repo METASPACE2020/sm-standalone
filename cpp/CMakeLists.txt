@@ -101,53 +101,38 @@ set(SRC_COMMON
   ms/periodic_table.cpp
   )
 
-add_library(ims STATIC ${SRC_COMMON})
+add_library(libims STATIC ${SRC_COMMON})
+set_target_properties(libims PROPERTIES OUTPUT_NAME ims)
 
-set(LIB_COMMON
-  ims
-  ${BLOSC_LIBRARY}
-  )
+set(LIB_COMMON libims ${BLOSC_LIBRARY})
 
-add_executable(convert tools/convert.cpp
+add_executable(ims-bin
+  tools/main.cpp
+  tools/convert.cpp
+  tools/isocalc.cpp
+  tools/detect.cpp
   imzml/reader.cpp)
+set_target_properties(ims-bin PROPERTIES OUTPUT_NAME ims)
 if ( WIN32 )
-  target_link_libraries(convert -Wl,-Bstatic -lxml2 -lfftw3 -liconv ims -lws2_32)
+  target_link_libraries(ims-bin -Wl,-Bstatic -lxml2 -lfftw3 -liconv libims -lgomp -lwinpthread -lws2_32)
 elseif ( APPLE )
-  target_link_libraries(convert -lxml2 -lfftw3 ims -lsnappy)
+  target_link_libraries(ims-bin ${BLOSC_LIBRARY} -lxml2 -lfftw3 libims -lsnappy /usr/local/opt/fftw/lib/libfftw3.a)
 else()
-  target_link_libraries(convert -Wl,-Bstatic ${LIBXML2_LIBRARIES} -llzma ${LIB_COMMON})
+  target_link_libraries(ims-bin -Wl,-Bstatic  ${LIB_COMMON} -lxml2 -lz -lfftw3 -lm -llzma)
 endif()
-add_dependencies(convert blosc ims)
-
-add_executable(isocalc tools/isocalc.cpp)
-if ( WIN32 )
-  target_link_libraries(isocalc -Wl,-Bstatic ims -lgomp -lfftw3 -lwinpthread -lws2_32)
-else()
-  target_link_libraries(isocalc  -Wl,-Bstatic ${LIB_COMMON} -Wl,-Bstatic -lfftw3)
-endif()
-add_dependencies(isocalc blosc msgpack ims)
-
-add_executable(detect tools/detect.cpp)
-if ( WIN32 )
-  target_link_libraries(detect -Wl,-Bstatic ims -lgomp -lwinpthread -lws2_32)
-elseif( APPLE )
-  target_link_libraries(detect ims -lsnappy)
-else()
-  target_link_libraries(detect -Wl,-Bstatic ${LIB_COMMON})
-endif()
-add_dependencies(detect blosc msgpack ims)
+add_dependencies(ims-bin blosc libims msgpack)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/)
 
 add_library(ims_cffi SHARED cffi/image_measures.cpp cffi/imzb.cpp cffi/isocalc.cpp)
 if ( WIN32 )
-  target_link_libraries(ims_cffi -Wl,-Bstatic -lxml2 -lfftw3 -liconv ims -lwinpthread -lgomp -lws2_32)
+  target_link_libraries(ims_cffi -Wl,-Bstatic -lxml2 -lfftw3 -liconv libims -lwinpthread -lgomp -lws2_32)
 elseif ( APPLE )
-  target_link_libraries(ims_cffi ${BLOSC_LIBRARY} ims /usr/local/opt/fftw/lib/libfftw3.a)
+  target_link_libraries(ims_cffi ${BLOSC_LIBRARY} libims /usr/local/opt/fftw/lib/libfftw3.a)
 else()
-  target_link_libraries(ims_cffi ${BLOSC_LIBRARY} -Wl,-Bstatic ims -lxml2 -lfftw3 -Wl,-Bdynamic -lpthread -lgomp)
+  target_link_libraries(ims_cffi ${BLOSC_LIBRARY} -Wl,-Bstatic libims -lxml2 -lfftw3 -Wl,-Bdynamic -lpthread -lgomp)
 endif()
-add_dependencies(ims_cffi blosc ims)
+add_dependencies(ims_cffi blosc libims)
 
 # export compilation database for autocompletion
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)

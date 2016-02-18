@@ -109,9 +109,9 @@ public:
   }
 };
 
-int main(int argc, char** argv) {
-  if (argc == 1) {
-    std::cout << "usage: ./convert <file.imzML> <out.imzb>" << std::endl;
+int convert_main(int argc, char** argv) {
+  if (argc < 3) {
+    std::cout << "Usage: ims convert <file.imzML> <out.imzb>" << std::endl;
     return 0;
   }
 
@@ -131,4 +131,5 @@ int main(int argc, char** argv) {
   }
   sorter.setMask(mask);
   sorter.close();
+  return 0;
 }
