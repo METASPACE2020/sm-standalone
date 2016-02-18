@@ -8,15 +8,20 @@ include_directories(${Boost_INCLUDE_DIRS})
 include(ExternalProject)
 
 if ( APPLE )
+  # necessary for GCC to use system assembler
+  # http://stackoverflow.com/questions/9840207/how-to-use-avx-pclmulqdq-on-mac-os-x-lion
   set(CMAKE_C_FLAGS "-Wa,-q")
   set(CMAKE_CXX_FLAGS "-Wa,-q")
+elseif( WIN32 )
+  # necessary for FFTW to work on 32-bit, as mentioned e.g. here: https://github.com/libgit2/libgit2/issues/3342
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mincoming-stack-boundary=2")
+else()
+  set(CMAKE_C_FLAGS "-fPIC")
+  set(CMAKE_CXX_FLAGS "-fPIC")
 endif()
 
-if ( WIN32 )
-  add_compile_options(-g -O2)
-else()
-  add_compile_options(-g -fPIC -O2)
-endif()
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O2")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -g -O2 -std=c++11 -pthread")
 
 # MessagePack - simple serialization library
 externalproject_add(msgpack
@@ -61,25 +66,12 @@ if("${PROJECT_SOURCE_DIR}" STREQUAL "${PROJECT_BINARY_DIR}")
 endif("${PROJECT_SOURCE_DIR}" STREQUAL "${PROJECT_BINARY_DIR}")
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -std=c++11 -pthread")
 
-if ( WIN32 )
-  # necessary for FFTW to work on 32-bit, as mentioned e.g. here: https://github.com/libgit2/libgit2/issues/3342
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mincoming-stack-boundary=2") 
-endif()
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Bstatic -static-libstdc++ -static-libgcc")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-Bstatic -static-libstdc++ -static-libgcc")
 
-if ( WIN32 )
-  # link all msys2/mingw libs statically on Windows
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Bstatic -static-libstdc++ -static-libgcc")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-Bstatic -static-libstdc++ -static-libgcc")
-
-  # necessary for static compilation
-  add_definitions(-DIN_LIBXML)
-elseif ( APPLE )
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
-  add_definitions(-DIN_LIBXML)
-endif()
+# necessary for static compilation
+add_definitions(-DIN_LIBXML)
 
 set(SRC_COMMON
   imzb/reader.cpp
@@ -91,14 +83,12 @@ set(SRC_COMMON
   )
 
 add_library(ims STATIC ${SRC_COMMON})
-if (NOT APPLE)
-  target_link_libraries(ims ${FFTW_LIBRARY} ${CMAKE_THREAD_LIBS_INIT} ${BLOSC_LIBRARY})
-endif()
 
 # FIXME: get rid of boost
 # on Mac OS X, homebrew hosts only clang-compiled binaries, but we'd rather use gcc
 set(LIB_COMMON
   ims
+  ${BLOSC_LIBRARY}
   ${Boost_PROGRAM_OPTIONS_LIBRARY}
   )
 
@@ -109,7 +99,7 @@ if ( WIN32 )
 elseif ( APPLE )
   target_link_libraries(convert -lxml2 -lfftw3 ims -lsnappy)
 else()
-  target_link_libraries(convert ${LIBXML2_LIBRARIES} ${LIB_COMMON})
+  target_link_libraries(convert -Wl,-Bstatic ${LIBXML2_LIBRARIES} -llzma ${LIB_COMMON})
 endif()
 add_dependencies(convert blosc ims)
 
@@ -117,7 +107,7 @@ add_executable(isocalc tools/isocalc.cpp)
 if ( WIN32 )
   target_link_libraries(isocalc -Wl,-Bstatic ${Boost_PROGRAM_OPTIONS_LIBRARY} -Wl,-Bstatic ims -lgomp -lfftw3 -lwinpthread -lws2_32)
 else()
-  target_link_libraries(isocalc ${LIB_COMMON})
+  target_link_libraries(isocalc  -Wl,-Bstatic ${LIB_COMMON} -Wl,-Bstatic -lfftw3)
 endif()
 add_dependencies(isocalc blosc msgpack ims)
 
@@ -127,7 +117,7 @@ if ( WIN32 )
 elseif( APPLE )
   target_link_libraries(detect ${Boost_PROGRAM_OPTIONS_LIBRARY} ims -lsnappy)
 else()
-  target_link_libraries(detect ${LIB_COMMON})
+  target_link_libraries(detect -Wl,-Bstatic ${LIB_COMMON})
 endif()
 add_dependencies(detect blosc msgpack ims)
 
@@ -139,7 +129,7 @@ if ( WIN32 )
 elseif ( APPLE )
   target_link_libraries(ims_cffi ${BLOSC_LIBRARY} ims /usr/local/opt/fftw/lib/libfftw3.a)
 else()
-  target_link_libraries(ims_cffi ims)
+  target_link_libraries(ims_cffi -Wl,-Bstatic ${BLOSC_LIBRARY} -lxml2 -lfftw3 -Wl,-Bdynamic ims -lpthread -lgomp)
 endif()
 add_dependencies(ims_cffi blosc ims)
 
