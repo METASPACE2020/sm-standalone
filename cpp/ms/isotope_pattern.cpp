@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <array>
 
 namespace ms {
 
@@ -50,7 +51,6 @@ constexpr double fwhm_to_sigma = 2.3548200450309493; // 2 \sqrt{2 \log 2}
 constexpr int width = 6; // defines how many sigmas to each side from the peak we consider
 constexpr size_t centroid_bins = 15;
 
-#include <array>
 typedef std::array<double, centroid_bins> window;
 
 std::pair<double, double> centroid(const window& mzs, const window& intensities) {

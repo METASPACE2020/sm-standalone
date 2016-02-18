@@ -7,6 +7,11 @@ include_directories(${Boost_INCLUDE_DIRS})
 
 include(ExternalProject)
 
+if ( APPLE )
+  set(CMAKE_C_FLAGS "-Wa,-q")
+  set(CMAKE_CXX_FLAGS "-Wa,-q")
+endif()
+
 if ( WIN32 )
   add_compile_options(-g -O2)
 else()
@@ -29,7 +34,10 @@ externalproject_add(blosc
   GIT_REPOSITORY https://github.com/Blosc/c-blosc
   GIT_TAG v1.7.1
   INSTALL_COMMAND ""
+  BUILD_COMMAND make blosc_static
   CMAKE_ARGS -DBUILD_TESTS:BOOL=OFF -DBUILD_BENCHMARKS:BOOL=OFF -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
+             -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+             -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
   )
 
 ExternalProject_Get_Property(blosc source_dir)
@@ -58,12 +66,18 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -std=c++11 -pthread"
 if ( WIN32 )
   # necessary for FFTW to work on 32-bit, as mentioned e.g. here: https://github.com/libgit2/libgit2/issues/3342
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mincoming-stack-boundary=2") 
+endif()
 
+if ( WIN32 )
   # link all msys2/mingw libs statically on Windows
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Bstatic -static-libstdc++ -static-libgcc")
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-Bstatic -static-libstdc++ -static-libgcc")
 
   # necessary for static compilation
+  add_definitions(-DIN_LIBXML)
+elseif ( APPLE )
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
   add_definitions(-DIN_LIBXML)
 endif()
 
@@ -77,8 +91,12 @@ set(SRC_COMMON
   )
 
 add_library(ims STATIC ${SRC_COMMON})
-target_link_libraries(ims ${FFTW_LIBRARY} ${CMAKE_THREAD_LIBS_INIT} ${BLOSC_LIBRARY})
+if (NOT APPLE)
+  target_link_libraries(ims ${FFTW_LIBRARY} ${CMAKE_THREAD_LIBS_INIT} ${BLOSC_LIBRARY})
+endif()
 
+# FIXME: get rid of boost
+# on Mac OS X, homebrew hosts only clang-compiled binaries, but we'd rather use gcc
 set(LIB_COMMON
   ims
   ${Boost_PROGRAM_OPTIONS_LIBRARY}
@@ -88,6 +106,8 @@ add_executable(convert tools/convert.cpp
   imzml/reader.cpp)
 if ( WIN32 )
   target_link_libraries(convert -Wl,-Bstatic -lxml2 -lfftw3 -liconv ims -lws2_32)
+elseif ( APPLE )
+  target_link_libraries(convert -lxml2 -lfftw3 ims -lsnappy)
 else()
   target_link_libraries(convert ${LIBXML2_LIBRARIES} ${LIB_COMMON})
 endif()
@@ -104,6 +124,8 @@ add_dependencies(isocalc blosc msgpack ims)
 add_executable(detect tools/detect.cpp)
 if ( WIN32 )
   target_link_libraries(detect -Wl,-Bstatic ${Boost_PROGRAM_OPTIONS_LIBRARY} -Wl,-Bstatic ims -lgomp -lwinpthread -lws2_32)
+elseif( APPLE )
+  target_link_libraries(detect ${Boost_PROGRAM_OPTIONS_LIBRARY} ims -lsnappy)
 else()
   target_link_libraries(detect ${LIB_COMMON})
 endif()
@@ -114,6 +136,8 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/)
 add_library(ims_cffi SHARED cffi/image_measures.cpp cffi/imzb.cpp cffi/isocalc.cpp)
 if ( WIN32 )
   target_link_libraries(ims_cffi -Wl,-Bstatic -lxml2 -lfftw3 -liconv ims -lwinpthread -lgomp -lws2_32)
+elseif ( APPLE )
+  target_link_libraries(ims_cffi ${BLOSC_LIBRARY} ims /usr/local/opt/fftw/lib/libfftw3.a)
 else()
   target_link_libraries(ims_cffi ims)
 endif()

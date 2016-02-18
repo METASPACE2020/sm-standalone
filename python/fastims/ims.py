@@ -12,11 +12,11 @@ class IsotopePattern(object):
                           ims.isotope_pattern_free)
 
     def centroids(self, resolution, min_abundance=1e-4, points_per_fwhm=25):
-        p = self.ptr
-        self.ptr = ffi.gc(ims.isotope_pattern_centroids(p, resolution,
-                                                        min_abundance, points_per_fwhm),
-                          ims.isotope_pattern_free)
-        return self
+        obj = object.__new__(IsotopePattern)
+        obj.ptr = ffi.gc(ims.isotope_pattern_centroids(self.ptr, resolution,
+                                                       min_abundance, points_per_fwhm),
+                         ims.isotope_pattern_free)
+        return obj
 
     def size(self):
         return ims.isotope_pattern_size(self.ptr)

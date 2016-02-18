@@ -21,7 +21,7 @@ extra_files = {
   os.path.join('python', 'fastims', 'ims.h')
 }
 
-for src, dst in extra_files.iteritems():
+for src, dst in extra_files.items():
   copyfile(src, dst)
 
 setup(
@@ -52,6 +52,6 @@ setup(
   ]
 )
 
-for dst in extra_files.itervalues():
+for dst in extra_files.values():
   os.remove(dst)
 
