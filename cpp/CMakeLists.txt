@@ -82,8 +82,8 @@ endif("${PROJECT_SOURCE_DIR}" STREQUAL "${PROJECT_BINARY_DIR}")
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Bstatic -static-libstdc++ -static-libgcc")
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-Bstatic -static-libstdc++ -static-libgcc")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
 
 # necessary for static compilation
 add_definitions(-DIN_LIBXML)
@@ -116,7 +116,7 @@ set_target_properties(ims-bin PROPERTIES OUTPUT_NAME ims)
 if ( WIN32 )
   target_link_libraries(ims-bin -Wl,-Bstatic -lxml2 -lfftw3 -liconv libims -lgomp -lwinpthread -lws2_32)
 elseif ( APPLE )
-  target_link_libraries(ims-bin ${BLOSC_LIBRARY} -lxml2 -lfftw3 libims -lsnappy /usr/local/opt/fftw/lib/libfftw3.a)
+  target_link_libraries(ims-bin ${BLOSC_LIBRARY} -lxml2 libims /usr/local/opt/fftw/lib/libfftw3.a)
 else()
   target_link_libraries(ims-bin -Wl,-Bstatic  ${LIB_COMMON} -lxml2 -lz -lfftw3 -lm -llzma)
 endif()
