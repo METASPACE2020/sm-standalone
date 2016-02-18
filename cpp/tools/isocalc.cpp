@@ -1,4 +1,5 @@
 #include "utils/isotope_pattern_db.hpp"
+#include "ms/isocalc.hpp"
 #include "cxxopts.hpp"
 
 #include <iostream>

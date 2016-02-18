@@ -111,7 +111,8 @@ add_executable(ims-bin
   tools/convert.cpp
   tools/isocalc.cpp
   tools/detect.cpp
-  imzml/reader.cpp)
+  imzml/reader.cpp
+  utils/isotope_pattern_db.cpp)
 set_target_properties(ims-bin PROPERTIES OUTPUT_NAME ims)
 if ( WIN32 )
   target_link_libraries(ims-bin -Wl,-Bstatic -lxml2 -lfftw3 -liconv libims -lgomp -lwinpthread -lws2_32)
