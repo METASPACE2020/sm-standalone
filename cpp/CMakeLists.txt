@@ -28,8 +28,8 @@ else()
   set(CMAKE_CXX_FLAGS "-fPIC")
 endif()
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O2")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -g -O2 -std=c++11 -pthread")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -std=c++11 -pthread")
 
 # MessagePack - simple serialization library
 externalproject_add(msgpack
