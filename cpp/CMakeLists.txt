@@ -1,9 +1,17 @@
 cmake_minimum_required(VERSION 2.8)
 project(SM_standalone)
 
-set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost REQUIRED COMPONENTS program_options)
-include_directories(${Boost_INCLUDE_DIRS})
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+  if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.9)
+    message(FATAL_ERROR "GCC version must be at least 4.9!")
+  endif()
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+  if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 3.5)
+    message(FATAL_ERROR "Clang version must be at least 3.5!")
+  endif()
+else()
+  message(FATAL_ERROR "Please use recent GCC or Clang to compile this project")
+endif()
 
 include(ExternalProject)
 
@@ -45,6 +53,17 @@ externalproject_add(blosc
              -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
   )
 
+# cxxopts - lightweight command line options parser
+externalproject_add(cxxopts
+  GIT_REPOSITORY https://github.com/jarro2783/cxxopts
+  GIT_TAG aec97a6f53c3486fc51e0d9857f10b683180d668
+  CONFIGURE_COMMAND ""
+  INSTALL_COMMAND ""
+  BUILD_COMMAND ""
+  ) # header-only library, requires std::regex
+ExternalProject_Get_Property(cxxopts source_dir)
+include_directories(${source_dir}/src)
+
 ExternalProject_Get_Property(blosc source_dir)
 include_directories(${source_dir}/blosc/)
 
@@ -84,12 +103,9 @@ set(SRC_COMMON
 
 add_library(ims STATIC ${SRC_COMMON})
 
-# FIXME: get rid of boost
-# on Mac OS X, homebrew hosts only clang-compiled binaries, but we'd rather use gcc
 set(LIB_COMMON
   ims
   ${BLOSC_LIBRARY}
-  ${Boost_PROGRAM_OPTIONS_LIBRARY}
   )
 
 add_executable(convert tools/convert.cpp
@@ -105,7 +121,7 @@ add_dependencies(convert blosc ims)
 
 add_executable(isocalc tools/isocalc.cpp)
 if ( WIN32 )
-  target_link_libraries(isocalc -Wl,-Bstatic ${Boost_PROGRAM_OPTIONS_LIBRARY} -Wl,-Bstatic ims -lgomp -lfftw3 -lwinpthread -lws2_32)
+  target_link_libraries(isocalc -Wl,-Bstatic ims -lgomp -lfftw3 -lwinpthread -lws2_32)
 else()
   target_link_libraries(isocalc  -Wl,-Bstatic ${LIB_COMMON} -Wl,-Bstatic -lfftw3)
 endif()
@@ -113,9 +129,9 @@ add_dependencies(isocalc blosc msgpack ims)
 
 add_executable(detect tools/detect.cpp)
 if ( WIN32 )
-  target_link_libraries(detect -Wl,-Bstatic ${Boost_PROGRAM_OPTIONS_LIBRARY} -Wl,-Bstatic ims -lgomp -lwinpthread -lws2_32)
+  target_link_libraries(detect -Wl,-Bstatic ims -lgomp -lwinpthread -lws2_32)
 elseif( APPLE )
-  target_link_libraries(detect ${Boost_PROGRAM_OPTIONS_LIBRARY} ims -lsnappy)
+  target_link_libraries(detect ims -lsnappy)
 else()
   target_link_libraries(detect -Wl,-Bstatic ${LIB_COMMON})
 endif()
@@ -129,7 +145,7 @@ if ( WIN32 )
 elseif ( APPLE )
   target_link_libraries(ims_cffi ${BLOSC_LIBRARY} ims /usr/local/opt/fftw/lib/libfftw3.a)
 else()
-  target_link_libraries(ims_cffi -Wl,-Bstatic ${BLOSC_LIBRARY} -lxml2 -lfftw3 -Wl,-Bdynamic ims -lpthread -lgomp)
+  target_link_libraries(ims_cffi ${BLOSC_LIBRARY} -Wl,-Bstatic ims -lxml2 -lfftw3 -Wl,-Bdynamic -lpthread -lgomp)
 endif()
 add_dependencies(ims_cffi blosc ims)
 

@@ -3,8 +3,7 @@
 
 #include "utils/isotope_pattern_db.hpp"
 
-#include "boost/program_options.hpp"
-#include "boost/algorithm/string/split.hpp"
+#include "cxxopts.hpp"
 
 #include <iostream>
 #include <iomanip>
@@ -24,34 +23,26 @@ int main(int argc, char** argv) {
   double ppm;
   bool remove_hotspots;
 
-  namespace po = boost::program_options;
-
-  po::options_description desc("Options");
-  desc.add_options()
-    ("ppm", po::value<double>(&ppm)->default_value(3.0),
-     "m/z-window half-width in ppm")
-    ("out", po::value<std::string>(&output_filename)->default_value("/dev/stdout"))
-    ("remove-hotspots", po::value<bool>(&remove_hotspots)->default_value(true),
-     "apply hotspot removal prior to computing metrics")
+  cxxopts::Options options("detect", " <isotope_patterns.db> <input.imzb>");
+  options.add_options()
+    ("ppm", "m/z-window half-width in ppm",
+     cxxopts::value<double>(ppm)->default_value("3.0"))
+    ("out", "",
+     cxxopts::value<std::string>(output_filename)->default_value("/dev/stdout"))
+    ("remove-hotspots", "apply hotspot removal prior to computing metrics",
+     cxxopts::value<bool>(remove_hotspots)->default_value("true"))
     ("help", "Print help");
 
-  po::options_description hidden;
-  hidden.add_options()
-    ("db_filename", po::value<std::string>(&db_filename))
-    ("input_file", po::value<std::string>(&imzb_filename));
+  options.add_options("hidden")
+    ("db_filename", "", cxxopts::value<std::string>(db_filename))
+    ("input_file", "", cxxopts::value<std::string>(imzb_filename));
 
-  po::positional_options_description p;
-  p.add("db_filename", 1);
-  p.add("input_file", 1);
+  options.parse_positional(std::vector<std::string>{"db_filename", "input_file"});
 
-  po::variables_map vm;
-  po::store(po::command_line_parser(argc, argv)
-      .options(po::options_description().add(desc).add(hidden)).positional(p).run(), vm);
-  po::notify(vm);
+  options.parse(argc, argv);
 
-  if (vm.count("help") || imzb_filename.empty() || db_filename.empty()) {
-    std::cout << "Usage: detect [options] <isotope_patterns.db> <input.imzb>\n";
-    std::cout << desc << std::endl;
+  if (options.count("help") || imzb_filename.empty() || db_filename.empty()) {
+    std::cout << options.help({""}) << std::endl;
     return 0;
   }
 
