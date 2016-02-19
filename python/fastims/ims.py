@@ -37,6 +37,11 @@ class IsotopePattern(object):
     def trim(self, n_peaks):
         ims.isotope_pattern_trim(self.ptr, n_peaks)
 
+    def envelope(self, resolution):
+        def envelopeFunc(mz):
+            return ims.isotope_pattern_envelope(self.ptr, resolution, mz)
+        return envelopeFunc
+
 if __name__ == '__main__':
     import sys
     pattern = IsotopePattern(sys.argv[1])

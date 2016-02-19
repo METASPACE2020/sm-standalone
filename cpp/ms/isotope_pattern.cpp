@@ -82,6 +82,20 @@ IsotopePattern sortByMass(const ms::IsotopePattern& p) {
   return result;
 }
 
+double IsotopePattern::envelope(double resolution, double mz) const {
+  double result = 0.0;
+
+  double fwhm = masses[0] / resolution;
+  double sigma = fwhm / fwhm_to_sigma;
+
+  for (size_t k = 0; k < size(); ++k) {
+    if (std::fabs(masses[k] - mz) > width * sigma)
+      continue;
+    result += abundances[k] * std::exp(-0.5 * std::pow((masses[k] - mz) / sigma, 2));
+  }
+  return result;
+}
+
 IsotopePattern IsotopePattern::centroids(double resolution, double min_abundance, size_t points_per_fwhm) const {
   if (this->isUnit() || this->masses.size() == 0)
     return *this;
@@ -96,10 +110,10 @@ IsotopePattern IsotopePattern::centroids(double resolution, double min_abundance
     auto envelope = [&](double mz) -> double {
       double result = 0.0;
       int k = i, n = p.size();
-      while (k > 0 && p.masses[i] - p.masses[k - 1] < width * sigma)
+      while (k > 0 && mz - p.masses[k - 1] < width * sigma)
         --k;
       while (k < n) {
-        if (p.masses[k] - p.masses[i] > width * sigma)
+        if (p.masses[k] - mz > width * sigma)
           break;
         result += p.abundances[k] * std::exp(-0.5 * std::pow((p.masses[k] - mz) / sigma, 2));
         ++k;

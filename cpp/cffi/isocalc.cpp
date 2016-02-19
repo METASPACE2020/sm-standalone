@@ -43,6 +43,11 @@ extern "C" {
     return new IsotopePattern(pattern);
   }
 
+  DLL_PUBLIC float isotope_pattern_envelope(IsotopePattern* p, double resolution, double mz)
+  {
+    return p->envelope(resolution, mz);
+  }
+
   DLL_PUBLIC IsotopePattern* isotope_pattern_centroids(IsotopePattern* p, double resolution,
     double min_abundance, int points_per_fwhm)
   {

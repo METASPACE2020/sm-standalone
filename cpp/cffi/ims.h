@@ -8,6 +8,7 @@ void imzb_reader_image(ImzbReader, double mz, double ppm, float* out);
 typedef void* IsotopePattern;
 IsotopePattern isotope_pattern_new(int n, double* masses, double* abundances);
 IsotopePattern isotope_pattern_new_from_sf(char* formula, double thr, double fft_thr);
+double isotope_pattern_envelope(IsotopePattern, double resolution, double mz);
 IsotopePattern isotope_pattern_centroids(IsotopePattern, double resolution, double min_abundance,
                                          int points_per_fwhm);
 int isotope_pattern_size(IsotopePattern);

@@ -21,8 +21,8 @@ from pyIMS.ion_datacube import ion_datacube
 
 import cffi
 ffi = cffi.FFI()
-ffi.cdef(open("cpp/cffi/imzb_cffi.h").read())
-imzb = ffi.dlopen("./cpp/build/libimzb.so")
+ffi.cdef(open("cpp/cffi/ims.h").read())
+imzb = ffi.dlopen("./cpp/build/libims_cffi.so")
 
 class ImzbReader(object):
     def __init__(self, filename):
@@ -281,4 +281,4 @@ def show_images_get():
                            selected_dataset=dataset)
 
 import sys
-app.run(sys.argv[1:], port=8085)
+app.run(sys.argv[1:], port=8080)

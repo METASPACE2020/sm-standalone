@@ -45,6 +45,8 @@ namespace ms {
 
     ms::IsotopePattern multiply(const IsotopePattern& other, double threshold = 0.0) const;
 
+    double envelope(double resolution, double mz) const;
+
     ms::IsotopePattern centroids(double resolution,
                                  double min_abundance = 1e-4,
                                  size_t points_per_fwhm = 25) const;
