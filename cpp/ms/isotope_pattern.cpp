@@ -48,7 +48,7 @@ void IsotopePattern::normalize() {
 }
 
 constexpr double fwhm_to_sigma = 2.3548200450309493; // 2 \sqrt{2 \log 2}
-constexpr int width = 6; // defines how many sigmas to each side from the peak we consider
+constexpr int width = 12; // defines how many sigmas to each side from the peak we consider
 constexpr size_t centroid_bins = 15;
 
 typedef std::array<double, centroid_bins> window;
@@ -106,55 +106,62 @@ IsotopePattern IsotopePattern::centroids(double resolution, double min_abundance
   double sigma = fwhm / fwhm_to_sigma;
   ms::IsotopePattern result;
 
-  for (size_t i = 0; i < p.size(); ++i) {
-    auto envelope = [&](double mz) -> double {
-      double result = 0.0;
-      int k = i, n = p.size();
-      while (k > 0 && mz - p.masses[k - 1] < width * sigma)
-        --k;
-      while (k < n) {
-        if (p.masses[k] - mz > width * sigma)
-          break;
-        result += p.abundances[k] * std::exp(-0.5 * std::pow((p.masses[k] - mz) / sigma, 2));
-        ++k;
-      }
-      return result;
-    };
+  size_t peak_index = 0; // one of the two peaks closest to the current center
+  bool empty = false; // true if there are no peaks within distance (width * sigma)
 
-    window mz_window, int_window;
-    size_t center = centroid_bins / 2;
-    mz_window[center] = p.masses[i] - width * sigma;
-    for (size_t j = 0; j < centroid_bins; j++) {
-      mz_window[j] = mz_window[center] + (int(j) - int(center)) * step;
-      int_window[j] = envelope(mz_window[j]);
-    }
-
-    for (;;) {
-      std::rotate(mz_window.begin(), mz_window.begin() + 1, mz_window.end());
-      std::rotate(int_window.begin(), int_window.begin() + 1, int_window.end());
-      mz_window.back() = mz_window[centroid_bins - 2] + step;
-      int_window.back() = envelope(mz_window.back());
-
-      if (mz_window[center] > p.masses[i] + width * sigma)
+  auto envelope = [&](double mz) -> double {
+    if (empty) return 0.0; // no isotopic peaks nearby
+    double result = 0.0;
+    int k = peak_index, n = p.size();
+    while (k > 0 && mz - p.masses[k - 1] < width * sigma)
+      --k;
+    while (k < n) {
+      if (p.masses[k] - mz > width * sigma)
         break;
-      if (i + 1 < p.size() && mz_window[center] >= p.masses[i + 1] - width * sigma)
-        break;
-
-      // check if it's a local maximum
-      if (!(int_window[center - 1] < int_window[center] &&
-            int_window[center] >= int_window[center + 1]))
-        continue;
-
-      // skip low-intensity peaks
-      if (int_window[center] < min_abundance)
-        continue;
-
-      double m, intensity;
-      std::tie(m, intensity) = centroid(mz_window, int_window);
-
-      result.masses.push_back(m);
-      result.abundances.push_back(intensity);
+      result += p.abundances[k] * std::exp(-0.5 * std::pow((p.masses[k] - mz) / sigma, 2));
+      ++k;
     }
+    return result;
+  };
+
+  window mz_window, int_window;
+  size_t center = centroid_bins / 2;
+  mz_window[center] = p.masses[0] - width * sigma;
+  for (size_t j = 0; j < centroid_bins; j++) {
+    mz_window[j] = mz_window[center] + (int(j) - int(center)) * step;
+    int_window[j] = envelope(mz_window[j]);
+  }
+
+  for (;;) {
+    std::rotate(mz_window.begin(), mz_window.begin() + 1, mz_window.end());
+    std::rotate(int_window.begin(), int_window.begin() + 1, int_window.end());
+    mz_window.back() = mz_window[centroid_bins - 2] + step;
+    int_window.back() = envelope(mz_window.back());
+
+    if (mz_window[center] > p.masses[peak_index] + width * sigma)
+      empty = true;
+
+    if (empty && peak_index + 1 == p.size())
+      break;
+
+    if (empty && peak_index + 1 < p.size() &&
+        mz_window[center] >= p.masses[peak_index + 1] - width * sigma)
+      empty = false, ++peak_index;
+
+    // check if it's a local maximum
+    if (!(int_window[center - 1] < int_window[center] &&
+          int_window[center] >= int_window[center + 1]))
+      continue;
+
+    // skip low-intensity peaks
+    if (int_window[center] < min_abundance)
+      continue;
+
+    double m, intensity;
+    std::tie(m, intensity) = centroid(mz_window, int_window);
+
+    result.masses.push_back(m);
+    result.abundances.push_back(intensity);
   }
 
   result.normalize();
