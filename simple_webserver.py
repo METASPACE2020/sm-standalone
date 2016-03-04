@@ -21,13 +21,14 @@ from pyIMS.ion_datacube import ion_datacube
 
 import cffi
 ffi = cffi.FFI()
-ffi.cdef(open("cpp/cffi/ims.h").read())
-imzb = ffi.dlopen("./cpp/build/libims_cffi.so")
+ffi.cdef(open("/home/lomereiter/github/ims-cpp/cffi/ims.h").read())
+imzb = ffi.dlopen("/home/lomereiter/github/ims-cpp/build/libimzb_cffi.so")
 
 class ImzbReader(object):
     def __init__(self, filename):
         self._reader = ffi.gc(imzb.imzb_reader_new(filename),
                               imzb.imzb_reader_free)
+
     def height(self):
         return imzb.imzb_reader_height(self._reader)
 
@@ -51,7 +52,9 @@ class ImzbReader(object):
             img = self.get_mz_image(mz, ppm)
             if cube.pixel_indices is None:
                 cube.pixel_indices = np.where(img.ravel() >= 0)[0]
-            cube.xic.append(img.ravel()[cube.pixel_indices])
+            img = img.ravel()[cube.pixel_indices]
+            img[img < 0] = 0.0
+            cube.xic.append(img)
         return cube
 
 class ImageWebserver(bottle.Bottle):
@@ -233,7 +236,9 @@ def show_images_get():
     tolerance = float(bottle.request.params.get('tolerance', 5.0))
     resolution = float(bottle.request.params.get('resolution', 1e5))
     selected_adduct = bottle.request.params.get('adduct', 'H')
-    hs_removal = bottle.request.params.get('hs_removal', True)
+    hs_removal = bottle.request.GET.get('hs_removal', False)
+    if hs_removal == 'on':
+        hs_removal = True
     pts = float(bottle.request.params.get('pts', 10))
     cutoff = float(bottle.request.params.get('pyisocalc_cutoff', 1e-3))
 
@@ -258,8 +263,9 @@ def show_images_get():
         datacube = app.get_datacube(dataset, mzs, tolerance)
         if hs_removal:
             for img in datacube.xic:
-                pc = np.percentile(img, 99)
-                img[img > pc] = pc
+                if len(img) > 0:
+                    pc = np.percentile(img, 99)
+                    img[img > pc] = pc
 
         chaos = measure_of_chaos(datacube.xic_to_image(0), 30, interp=False)[0]
 
