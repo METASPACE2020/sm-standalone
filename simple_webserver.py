@@ -18,44 +18,25 @@ import bottle
 from pyMS.pyisocalc import pyisocalc
 
 from pyIMS.ion_datacube import ion_datacube
+from pyImagingMSpec.image_measures import *
 
-import cffi
-ffi = cffi.FFI()
-ffi.cdef(open("/home/lomereiter/github/ims-cpp/cffi/ims.h").read())
-imzb = ffi.dlopen("/home/lomereiter/github/ims-cpp/build/libimzb_cffi.so")
+from cpyImagingMSpec import ImzbReader
 
-class ImzbReader(object):
-    def __init__(self, filename):
-        self._reader = ffi.gc(imzb.imzb_reader_new(filename),
-                              imzb.imzb_reader_free)
+def get_datacube(reader, mzs, ppm):
+    cube = ion_datacube()
+    cube.xic = []
+    cube.nRows = reader.height
+    cube.nColumns = reader.width
+    cube.pixel_indices = None
 
-    def height(self):
-        return imzb.imzb_reader_height(self._reader)
-
-    def width(self):
-        return imzb.imzb_reader_width(self._reader)
-
-    def get_mz_image(self, mz, ppm):
-        data = np.zeros(self.height() * self.width(), dtype=np.float32)
-        imzb.imzb_reader_image(self._reader, ffi.cast("double", mz), ffi.cast("double", ppm),
-                               ffi.from_buffer(data))
-        return data.reshape((self.height(), self.width()))
-
-    def get_datacube(self, mzs, ppm):
-        cube = ion_datacube()
-        cube.xic = []
-        cube.nRows = self.height()
-        cube.nColumns = self.width()
-        cube.pixel_indices = None
-
-        for mz in mzs:
-            img = self.get_mz_image(mz, ppm)
-            if cube.pixel_indices is None:
-                cube.pixel_indices = np.where(img.ravel() >= 0)[0]
-            img = img.ravel()[cube.pixel_indices]
-            img[img < 0] = 0.0
-            cube.xic.append(img)
-        return cube
+    for mz in mzs:
+        img = reader.get_mz_image(mz, ppm)
+        if cube.pixel_indices is None:
+            cube.pixel_indices = np.where(img.ravel() >= 0)[0]
+        img = img.ravel()[cube.pixel_indices]
+        img[img < 0] = 0.0
+        cube.xic.append(img)
+    return cube
 
 class ImageWebserver(bottle.Bottle):
     def __init__(self, *args, **kwargs):
@@ -108,7 +89,7 @@ class ImageWebserver(bottle.Bottle):
         if self.in_memory is True:
             return self.data.get_ion_image(np.array(mzs), tol)
         else:
-            return self.paths[dataset].get_datacube(mzs, tol)
+            return get_datacube(self.paths[dataset], mzs, tol)
 
 app = ImageWebserver()
 
@@ -116,7 +97,7 @@ app = ImageWebserver()
 def show_form():
     return bottle.template('show_images', hs_removal=True, selected_dataset=app.paths.iterkeys().next(),
                            isotope_patterns={}, formula="", selected_adduct='H', pretty_formula="", tol=5,
-                           resolution=100000, datasets=app.paths.keys())
+                           resolution=100000, npeaks=4, datasets=app.paths.keys())
 
 import io
 import os
@@ -225,10 +206,6 @@ def generate_correlation_plot(dataset, formula, adduct, mzs, intensities, tol):
     buf.seek(0)
     return buf
 
-from pyIMS.image_measures.isotope_pattern_match import isotope_pattern_match
-from pyIMS.image_measures.isotope_image_correlation import isotope_image_correlation
-from pyIMS.image_measures.level_sets_measure import measure_of_chaos
-
 @app.route("/show")
 def show_images_get():
     dataset = bottle.request.params.get('dataset', app.paths.iterkeys().next())
@@ -237,6 +214,7 @@ def show_images_get():
     resolution = float(bottle.request.params.get('resolution', 1e5))
     selected_adduct = bottle.request.params.get('adduct', 'H')
     hs_removal = bottle.request.GET.get('hs_removal', False)
+    k = int(bottle.request.params.get('npeaks', 4))
     if hs_removal == 'on':
         hs_removal = True
     pts = float(bottle.request.params.get('pts', 10))
@@ -251,7 +229,6 @@ def show_images_get():
         pattern = pyisocalc.apply_gaussian(raw_pattern, fwhm, pts, exact=True)
 
         mzs, intensities = map(np.array, pattern.get_spectrum(source='centroids'))
-        k = 5
         if len(mzs) > k:
             order = intensities.argsort()[::-1]
             mzs = mzs[order][:k]
@@ -267,7 +244,7 @@ def show_images_get():
                     pc = np.percentile(img, 99)
                     img[img > pc] = pc
 
-        chaos = measure_of_chaos(datacube.xic_to_image(0), 30, interp=False)[0]
+        chaos = measure_of_chaos(datacube.xic_to_image(0), 30, overwrite=False)
 
         iso_corr = isotope_pattern_match(datacube.xic, intensities)
 
@@ -284,7 +261,7 @@ def show_images_get():
                            isotope_patterns=isotope_patterns, formula=formula, selected_adduct=selected_adduct,
                            pretty_formula=re.sub(r"(\d+)", r"<sub>\1</sub>", formula),
                            resolution=resolution, tol=tolerance, datasets=app.paths.keys(),
-                           selected_dataset=dataset)
+                           npeaks=k, selected_dataset=dataset)
 
 import sys
-app.run(sys.argv[1:], port=8080)
+app.run(sys.argv[1:], port=8081)

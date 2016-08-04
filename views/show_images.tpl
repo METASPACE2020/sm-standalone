@@ -56,6 +56,19 @@
       </label>
     </div>
   </div>
+
+  <div class="form-group col-sm-2">
+  </div>
+
+  <div class="form-group col-sm-10">
+    <label class="col-sm-1">Number of peaks:</label>
+    <div class="col-sm-3">
+      <input name="npeaks" type="text" id="npeaks" class="form-control" value="" data-slider-min="4" data-slider-max="20" data-slider-step="1" data-slider-value="{{npeaks}}" data-slider-orientation="horizontal" data-slider-selection="after" data-slider-tooltip="show">
+    </div>
+
+    <div class="col-sm-6">
+    </div>
+  </div>
 <!-- Pyisocalc cutoff: <input name="pyisocalc_cutoff" type="number" step="any" value="1e-5"><br/>-->
 <!-- Points per FWHM: <input name="pts" type="number" step="1" value="10"></br> -->
     <input type="hidden" name="pyisocalc_cutoff" value="1e-3">
@@ -139,6 +152,7 @@
 <script type="text/javascript">
   $("#tolerance").slider({formatter:function(ppm){return ''+ppm + " ppm";}});
   $("#resolution").slider({formatter:function(res){return ''+res;}});
+  $("#npeaks").slider({formatter:function(n){return ''+n;}});
 
   $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
       $("#selected_adduct").val($(e.target).attr('href').split("-")[1]);
